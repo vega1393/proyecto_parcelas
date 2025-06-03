@@ -1,0 +1,9 @@
+PyQt6>=6.5.0
+geopandas>=0.13.0
+shapely>=2.0.0
+pyogrio>=0.6.0
+pandas>=1.5.0
+numpy>=1.22.0
+matplotlib>=3.5.0
+fiona>=1.8.20  # Para listar capas de geodatabases
+# tk/tkinter viene incluido con la instalación estándar de Python 
