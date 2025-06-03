@@ -108,6 +108,7 @@ class ParcelGeneratorApp(QMainWindow):
         self.config_tab.findChild(QPushButton, "save_settings_btn").clicked.connect(self._save_gui_settings)
         self.config_tab.findChild(QPushButton, "load_settings_btn").clicked.connect(self._restore_gui_settings)
         self.config_tab.findChild(QComboBox, "log_level_combo").currentTextChanged.connect(self._on_log_level_changed)
+        self.config_tab.configChanged.connect(self._on_config_changed)
 
     # --- PO and Exclusion logic ---
     def _select_po_file(self) -> None:
@@ -442,6 +443,7 @@ class ParcelGeneratorApp(QMainWindow):
         """
         Sincroniza los atributos internos de la clase con los widgets de los tabs.
         Si alguna ruta no existe, muestra un mensaje en el widget correspondiente.
+        Además, log temporal para depuración de PO.
         """
         # Pipeline tab
         self.pipeline_tab.input_line.setText(getattr(self, "input_path", ""))
@@ -459,8 +461,9 @@ class ParcelGeneratorApp(QMainWindow):
         po_path = getattr(self, "po_path", "")
         po_layer = getattr(self, "po_layer", "")
         po_fields = getattr(self, "po_fields", [])
+        self.log_text.append(f"[DEBUG] PO path exists: {os.path.exists(po_path)}")
         if po_path and not os.path.exists(po_path):
-            self.po_tab.po_path_line.setText(f"{po_path} [NOT FOUND]")
+            self.po_tab.po_path_line.setText(f"{po_path} [NOT FOUND - Check path or permissions]")
             self.po_tab.po_layer_combo.clear()
             self.po_tab.po_layer_combo.addItem("INVALID PATH")
             self.po_tab.po_fields_label.setText(", ".join(po_fields))
@@ -468,15 +471,18 @@ class ParcelGeneratorApp(QMainWindow):
             self.po_tab.po_path_line.setText(po_path)
             try:
                 layers = list_layers(po_path)
+                self.log_text.append(f"[DEBUG] list_layers: {layers}")
                 self.po_tab.po_layer_combo.clear()
                 self.po_tab.po_layer_combo.addItems(layers)
                 idx_layer = self.po_tab.po_layer_combo.findText(po_layer)
+                self.log_text.append(f"[DEBUG] Looking for layer: '{po_layer}' (found idx: {idx_layer})")
                 if idx_layer >= 0:
                     self.po_tab.po_layer_combo.setCurrentIndex(idx_layer)
                 else:
                     self.po_tab.po_layer_combo.addItem(f"{po_layer} [NOT FOUND]")
                     self.po_tab.po_layer_combo.setCurrentIndex(self.po_tab.po_layer_combo.count()-1)
-            except Exception:
+            except Exception as e:
+                self.log_text.append(f"[DEBUG] Exception in list_layers: {e}")
                 self.po_tab.po_layer_combo.clear()
                 self.po_tab.po_layer_combo.addItem("INVALID PATH")
             self.po_tab.po_fields_label.setText(", ".join(po_fields))
@@ -552,6 +558,10 @@ class ParcelGeneratorApp(QMainWindow):
         self.po_layer = po_conf.get("capa", "")
         self.po_fields = po_conf.get("campos", [])
         self.exclusion_list = cfg_overrides.get("CAPAS_EXCLUSION", [])
+        # Log temporal para depuración
+        self.log_text.append(f"[DEBUG] PO path: {self.po_path}")
+        self.log_text.append(f"[DEBUG] PO layer: {self.po_layer}")
+        self.log_text.append(f"[DEBUG] PO fields: {self.po_fields}")
         self._sync_attrs_to_tabs()
 
     def _save_gui_settings(self) -> None:
@@ -578,6 +588,7 @@ class ParcelGeneratorApp(QMainWindow):
         }
         save_gui_settings(settings)
         self.log_text.append("[INFO] Settings saved.")
+        self.config_tab.configChanged.emit(settings)
 
     def _restore_gui_settings(self) -> None:
         settings = load_gui_settings()
@@ -599,6 +610,7 @@ class ParcelGeneratorApp(QMainWindow):
         self.settings = settings
         self._sync_attrs_to_tabs()
         self.log_text.append("[INFO] Settings loaded.")
+        self.config_tab.configChanged.emit(settings)
 
     def _on_any_field_changed(self):
         self._sync_tabs_to_attrs()
@@ -637,3 +649,11 @@ class ParcelGeneratorApp(QMainWindow):
     def _hash_dict(self, d):
         import hashlib
         return hashlib.sha256(json.dumps(d, sort_keys=True).encode("utf-8")).hexdigest()
+
+    def _on_config_changed(self, config: dict) -> None:
+        """
+        Callback que se ejecuta cuando la configuración cambia en ConfigTab.
+        Refresca los tabs relevantes (por ejemplo, POTab).
+        """
+        if hasattr(self.po_tab, "refresh_from_config"):
+            self.po_tab.refresh_from_config(config.get("po_config", {}))

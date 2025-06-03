@@ -23,4 +23,34 @@ class POTab(QWidget):
         po_fields_layout.addWidget(self.po_fields_label)
         form_layout.addRow("PO fields:", po_fields_layout)
         layout.addLayout(form_layout)
-        self.setLayout(layout) 
+        self.setLayout(layout)
+
+    def refresh_from_config(self, config: dict) -> None:
+        """
+        Actualiza los widgets del tab PO según la configuración recibida.
+        """
+        po_path = config.get("path", "")
+        po_layer = config.get("layer", "")
+        po_fields = config.get("fields", [])
+        self.po_path_line.setText(po_path)
+        self.po_fields_label.setText(", ".join(po_fields))
+        # Intentar recargar capas si el archivo existe
+        from src.utils.gpkg_helpers import list_layers
+        import os
+        self.po_layer_combo.clear()
+        if po_path and os.path.exists(po_path):
+            try:
+                layers = list_layers(po_path)
+                self.po_layer_combo.addItems(layers)
+                idx = self.po_layer_combo.findText(po_layer)
+                if idx >= 0:
+                    self.po_layer_combo.setCurrentIndex(idx)
+                else:
+                    self.po_layer_combo.addItem(f"{po_layer} [NOT FOUND]")
+                    self.po_layer_combo.setCurrentIndex(self.po_layer_combo.count()-1)
+            except Exception:
+                self.po_layer_combo.addItem("INVALID PATH")
+        elif po_layer:
+            self.po_layer_combo.addItem(f"{po_layer} [NOT FOUND]")
+        else:
+            self.po_layer_combo.addItem("") 

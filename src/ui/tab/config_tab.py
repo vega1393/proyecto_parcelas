@@ -1,6 +1,9 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox
+from PyQt6.QtCore import pyqtSignal
 
 class ConfigTab(QWidget):
+    configChanged = pyqtSignal(dict)  # Señal custom para notificar cambios de configuración
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_ui()
