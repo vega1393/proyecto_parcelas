@@ -22,6 +22,6 @@ def list_fields(file_path: str, layer: str) -> List[str]:
     """
     try:
         with fiona.open(file_path, layer=layer) as src:
-            return list(schema["properties"].keys())
+            return list(src.schema["properties"].keys())
     except Exception:
         return [] 

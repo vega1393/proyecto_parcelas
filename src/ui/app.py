@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox,
     QSpinBox, QDoubleSpinBox, QProgressBar, QTextEdit, QMessageBox,
-    QListWidget, QListWidgetItem, QInputDialog, QTabWidget
+    QListWidget, QListWidgetItem, QInputDialog, QTabWidget, QDialog, QSplitter
 )
 from PyQt6.QtCore import Qt, QProcess, QProcessEnvironment # Import QProcessEnvironment
 from src.utils.settings import load_gui_settings, save_gui_settings
@@ -21,6 +21,7 @@ from src.ui.tab.pipeline_tab import PipelineTab
 from src.ui.tab.po_tab import POTab
 from src.ui.tab.exclusion_tab import ExclusionTab
 from src.ui.tab.config_tab import ConfigTab
+from src.ui.dialogs.po_fields_dialog import POFieldsDialog
 
 print("[DEBUG] INICIO ui/app.py")
 
@@ -50,6 +51,8 @@ class ParcelGeneratorApp(QMainWindow):
         Initializes the main UI layout.
         """
         central_widget = QWidget()
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        # --- Tabs arriba ---
         tabs = QTabWidget()
         self.pipeline_tab = PipelineTab()
         self.po_tab = POTab()
@@ -59,15 +62,30 @@ class ParcelGeneratorApp(QMainWindow):
         tabs.addTab(self.po_tab, "Plan Operative (PO)")
         tabs.addTab(self.exclusion_tab, "Exclusion Layers")
         tabs.addTab(self.config_tab, "Configuration")
-        layout = QVBoxLayout()
-        layout.addWidget(tabs)
-        # --- Log transversal ---
+        # --- Logs abajo con botón limpiar ---
+        log_widget = QWidget()
+        log_layout = QVBoxLayout()
+        log_btn_layout = QHBoxLayout()
+        self.clear_log_btn = QPushButton("Limpiar logs")
+        self.clear_log_btn.setToolTip("Borra todo el contenido de la consola de logs.")
+        log_btn_layout.addWidget(self.clear_log_btn)
+        log_btn_layout.addStretch(1)
+        log_layout.addLayout(log_btn_layout)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setPlaceholderText("Log and messages will appear here...")
-        layout.addWidget(self.log_text)
-        central_widget.setLayout(layout)
+        log_layout.addWidget(self.log_text)
+        log_widget.setLayout(log_layout)
+        # --- Splitter ---
+        splitter.addWidget(tabs)
+        splitter.addWidget(log_widget)
+        splitter.setSizes([600, 200]) # Altura inicial sugerida
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(splitter)
+        central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
+        # --- Conexión botón limpiar logs ---
+        self.clear_log_btn.clicked.connect(self.log_text.clear)
 
         # --- Conexión de señales y eventos entre tabs y lógica global ---
         # Pipeline: Run/Stop/Browse
@@ -85,16 +103,19 @@ class ParcelGeneratorApp(QMainWindow):
         # Browse buttons
         self.pipeline_tab.input_line.setPlaceholderText("Input file path...")
         self.pipeline_tab.output_line.setPlaceholderText("Output directory...")
+        self.pipeline_tab.input_browse_btn.clicked.connect(self._select_input_file)
+        self.pipeline_tab.output_browse_btn.clicked.connect(self._select_output_dir)
         self.pipeline_tab.input_line.mouseDoubleClickEvent = lambda event: self._select_input_file()
         self.pipeline_tab.output_line.mouseDoubleClickEvent = lambda event: self._select_output_dir()
 
         # PO tab: campos y browse
         self.po_tab.po_path_line.textChanged.connect(self._on_any_field_changed)
-        self.po_tab.po_layer_combo.currentTextChanged.connect(self._on_any_field_changed)
-        self.po_tab.po_fields_btn.clicked.connect(self._select_po_fields)
+        self.po_tab.po_layer_combo.currentTextChanged.connect(self._on_po_layer_changed) # <--- CONECTAR ESTO
+        self.po_tab.po_fields_btn.clicked.connect(self._select_po_fields) # Esta conexión ya debería existir
+        self.po_tab.po_file_btn.clicked.connect(self._select_po_file)
         # Browse PO file
         self.po_tab.po_path_line.mouseDoubleClickEvent = lambda event: self._select_po_file()
-
+        
         # Exclusiones: agregar/quitar
         self.exclusion_tab.excl_list_widget.model().rowsInserted.connect(self._on_any_field_changed)
         self.exclusion_tab.excl_list_widget.model().rowsRemoved.connect(self._on_any_field_changed)
@@ -123,25 +144,76 @@ class ParcelGeneratorApp(QMainWindow):
             self.po_fields = []
             self.po_tab.po_fields_label.setText("")
 
-    def _on_po_layer_changed(self, layer: str) -> None:
-        self.po_layer = layer
-        self.po_fields = []
-        self.po_tab.po_fields_label.setText("")
+    def _on_po_layer_changed(self, layer_name: str) -> None: #
+        """
+        Handles changes in the PO layer selection.
+        Resets selected PO fields when the layer changes.
+        """
+        self.log_text.append(f"[DEBUG] PO Layer changed to: {layer_name}")
+        # self.po_layer se actualiza en _get_pipeline_params o al cargar settings.
+        # Lo importante aquí es resetear los campos si la capa cambia,
+        # porque los campos de la capa anterior pueden no ser válidos para la nueva.
+        if self.po_tab.po_layer_combo.currentText() != self.po_layer: # Si realmente cambió respecto al estado
+            self.po_fields = [] # Reset selected fields
+            self.po_tab.po_fields_label.setText("") # Clear the label
+            self._on_any_field_changed() # Signal that GUI state has changed
+
+        self.po_layer = layer_name # Actualizar el atributo interno
 
     def _select_po_fields(self) -> None:
+        """
+        Opens a custom dialog to select fields from the PO layer.
+        """
         file_path = self.po_tab.po_path_line.text()
-        layer = self.po_tab.po_layer_combo.currentText()
-        if not file_path or not layer:
-            QMessageBox.warning(self, "PO selection", "Please select a PO file and layer first.")
+        layer_name = self.po_tab.po_layer_combo.currentText()
+
+        if not file_path or not os.path.exists(file_path):
+            QMessageBox.warning(self, "PO File Error", "Please select a valid PO file first.")
             return
-        fields = list_fields(file_path, layer)
-        if not fields:
-            QMessageBox.warning(self, "PO selection", "No fields found in the selected layer.")
+        if not layer_name or "[NOT FOUND" in layer_name or "INVALID" in layer_name: # Check for invalid layer entries
+            QMessageBox.warning(self, "PO Layer Error", "Please select a valid layer from the PO file.")
             return
-        selected, ok = QInputDialog.getItem(self, "Select PO fields", "Fields (comma separated):", [", ".join(fields)], 0, True)
-        if ok and selected:
-            self.po_fields = [f.strip() for f in selected.split(",") if f.strip()]
-            self.po_tab.po_fields_label.setText(", ".join(self.po_fields))
+
+        self.log_text.append(f"[DEBUG _select_po_fields] Listing fields for: '{file_path}', Layer: '{layer_name}'")
+        try:
+            available_fields = list_fields(file_path, layer_name)
+            self.log_text.append(f"[DEBUG _select_po_fields] Available fields: {available_fields}")
+        except Exception as e:
+            self.log_text.append(f"[ERROR _select_po_fields] Error listing fields: {str(e)}")
+            QMessageBox.critical(self, "Field Listing Error", f"Could not list fields for layer '{layer_name}':\n{str(e)}")
+            return
+
+        if not available_fields:
+            QMessageBox.information(self, "No Fields", f"No attribute fields found in layer '{layer_name}'.")
+            return
+
+        # `self.po_fields` contiene los campos actualmente seleccionados (cargados o previamente elegidos)
+        dialog = POFieldsDialog(available_fields, self.po_fields, self)
+        
+        # Conectar la señal del diálogo a un método para manejar los campos seleccionados
+        # dialog.fieldsSelected.connect(self._handle_selected_po_fields) # Alternativa si prefieres señal/slot
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            newly_selected_fields = dialog.get_selected_fields()
+            if newly_selected_fields != self.po_fields:
+                self.po_fields = newly_selected_fields
+                self.po_tab.po_fields_label.setText(", ".join(self.po_fields))
+                self._on_any_field_changed() # To track GUI state changes
+                self.log_text.append(f"[INFO] PO fields updated to: {self.po_fields}")
+            else:
+                 self.log_text.append("[INFO] PO fields selection unchanged.")
+        else:
+            self.log_text.append("[INFO] PO fields selection cancelled.")
+
+    # Si usas la señal fieldsSelected desde el diálogo, necesitarías este método:
+    # def _handle_selected_po_fields(self, selected_fields: List[str]):
+    #     if selected_fields != self.po_fields:
+    #         self.po_fields = selected_fields
+    #         self.po_tab.po_fields_label.setText(", ".join(self.po_fields))
+    #         self._on_any_field_changed()
+    #         self.log_text.append(f"[INFO] PO fields updated via signal to: {self.po_fields}")
+    #     else:
+    #         self.log_text.append("[INFO] PO fields selection unchanged (via signal).")
 
     def _add_exclusion(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(self, "Select exclusion file", "", "Geo Files (*.shp *.gpkg *.geojson *.gdb);;All Files (*)")
@@ -286,7 +358,7 @@ class ParcelGeneratorApp(QMainWindow):
         self.process.start()
 
     def _on_process_stdout(self):
-        data = self.process.readAllStandardOutput().data().decode().strip()
+        data = self.process.readAllStandardOutput().data().decode("utf-8", errors="replace").strip()
         # self.log_text.append(f"[DEBUG UI STDOUT RAW] '{data}'") # Para depurar la data cruda
         if not data: # Ignorar si está vacío después de strip()
             return
@@ -433,85 +505,18 @@ class ParcelGeneratorApp(QMainWindow):
         self.buffer_distance = self.pipeline_tab.buffer_spin.value()
         self.min_distance = self.pipeline_tab.min_distance_spin.value()
         # PO tab
-        self.po_path = self.po_tab.po_path_line.text()
-        self.po_layer = self.po_tab.po_layer_combo.currentText()
-        self.po_fields = [f.strip() for f in self.po_tab.po_fields_label.text().split(",") if f.strip()]
+        # self.po_path = self.po_tab.po_path_line.text()
+        # self.po_layer = self.po_tab.po_layer_combo.currentText()
+        # self.po_fields = [f.strip() for f in self.po_tab.po_fields_label.text().split(",") if f.strip()]
         # Exclusion tab
         # self.exclusion_list = [self.exclusion_tab.excl_list_widget.item(i).text() for i in range(self.exclusion_tab.excl_list_widget.count())]
-
-    def _sync_attrs_to_tabs(self) -> None:
-        """
-        Sincroniza los atributos internos de la clase con los widgets de los tabs.
-        Si alguna ruta no existe, muestra un mensaje en el widget correspondiente.
-        Además, log temporal para depuración de PO.
-        """
-        # Pipeline tab
-        self.pipeline_tab.input_line.setText(getattr(self, "input_path", ""))
-        self.pipeline_tab.output_line.setText(getattr(self, "output_dir", ""))
-        idx = self.pipeline_tab.style_combo.findText(getattr(self, "style", "calibration"))
-        if idx >= 0:
-            self.pipeline_tab.style_combo.setCurrentIndex(idx)
-        self.pipeline_tab.intensity_spin.setValue(getattr(self, "intensity", 50))
-        self.pipeline_tab.min_parcels_spin.setValue(getattr(self, "min_parcels", 1))
-        self.pipeline_tab.max_parcels_spin.setValue(getattr(self, "max_parcels", 10))
-        self.pipeline_tab.min_area_spin.setValue(getattr(self, "min_area", 0.3))
-        self.pipeline_tab.buffer_spin.setValue(getattr(self, "buffer_distance", -20))
-        self.pipeline_tab.min_distance_spin.setValue(getattr(self, "min_distance", 60.0))
-        # PO tab
-        po_path = getattr(self, "po_path", "")
-        po_layer = getattr(self, "po_layer", "")
-        po_fields = getattr(self, "po_fields", [])
-        self.log_text.append(f"[DEBUG] PO path exists: {os.path.exists(po_path)}")
-        if po_path and not os.path.exists(po_path):
-            self.po_tab.po_path_line.setText(f"{po_path} [NOT FOUND - Check path or permissions]")
-            self.po_tab.po_layer_combo.clear()
-            self.po_tab.po_layer_combo.addItem("INVALID PATH")
-            self.po_tab.po_fields_label.setText(", ".join(po_fields))
-        elif po_path:
-            self.po_tab.po_path_line.setText(po_path)
-            try:
-                layers = list_layers(po_path)
-                self.log_text.append(f"[DEBUG] list_layers: {layers}")
-                self.po_tab.po_layer_combo.clear()
-                self.po_tab.po_layer_combo.addItems(layers)
-                idx_layer = self.po_tab.po_layer_combo.findText(po_layer)
-                self.log_text.append(f"[DEBUG] Looking for layer: '{po_layer}' (found idx: {idx_layer})")
-                if idx_layer >= 0:
-                    self.po_tab.po_layer_combo.setCurrentIndex(idx_layer)
-                else:
-                    self.po_tab.po_layer_combo.addItem(f"{po_layer} [NOT FOUND]")
-                    self.po_tab.po_layer_combo.setCurrentIndex(self.po_tab.po_layer_combo.count()-1)
-            except Exception as e:
-                self.log_text.append(f"[DEBUG] Exception in list_layers: {e}")
-                self.po_tab.po_layer_combo.clear()
-                self.po_tab.po_layer_combo.addItem("INVALID PATH")
-            self.po_tab.po_fields_label.setText(", ".join(po_fields))
-        else:
-            self.po_tab.po_path_line.setText("")
-            self.po_tab.po_layer_combo.clear()
-            self.po_tab.po_fields_label.setText("")
-        # Exclusion tab
-        self.exclusion_tab.excl_list_widget.clear()
-        for excl in getattr(self, "exclusion_list", []):
-            if isinstance(excl, dict):
-                path = excl.get("path", "")
-                desc = excl.get("description", os.path.basename(path) or "Unknown")
-                layer = excl.get("layer")
-                if path and not os.path.exists(path):
-                    text = f"{desc} [NOT FOUND]"
-                else:
-                    text = desc
-                if layer:
-                    text += f" ({layer})"
-                self.exclusion_tab.excl_list_widget.addItem(text)
-            else:
-                self.exclusion_tab.excl_list_widget.addItem(str(excl))
-
-    def _get_pipeline_params(self):
-        self._sync_tabs_to_attrs()
+    
+    def _get_pipeline_params(self): # Aproximadamente línea 525 en el archivo que subiste
+        self._sync_tabs_to_attrs() # <-- MANTENER esta llamada aquí
         input_path = self.input_path.strip()
         output_dir = self.output_dir.strip()
         style = self.style
+        
         cfg_overrides = {}
         if style == "custom":
             cfg_overrides = {
@@ -522,23 +527,153 @@ class ParcelGeneratorApp(QMainWindow):
                 "BUFFER_DISTANCE": self.buffer_distance,
                 "MIN_DISTANCE": self.min_distance
             }
+            
+        # Asegúrate de que self.po_path, self.po_layer y self.po_fields estén actualizados.
+        # _sync_tabs_to_attrs en tu versión actual no los actualiza directamente desde la GUI,
+        # lo cual es correcto si se actualizan en sus propios manejadores de eventos.
         po_config = {
-            "ruta": self.po_path,
+            "ruta": self.po_path, 
             "capa": self.po_layer,
             "campos": self.po_fields
-        } if self.po_path and self.po_layer else None
+        } if self.po_path and self.po_layer else None # Considera si un PO sin capa o campos es válido
+        
         if po_config:
             cfg_overrides["PO_CONFIG"] = po_config
-        if self.exclusion_list:
+            
+        if self.exclusion_list: # self.exclusion_list se actualiza en _add_exclusion/_remove_exclusion
             cfg_overrides["CAPAS_EXCLUSION"] = self.exclusion_list
+            
         params = {
             "input_path": input_path,
             "output_dir": output_dir,
-            "entrega": None,
+            "entrega": None, # Asumo que esto se gestiona en otro lugar o es None intencionadamente
             "style": style,
             "cfg_overrides": cfg_overrides
         }
         return params
+    
+    def _sync_attrs_to_tabs(self) -> None: #
+        """
+        Sincroniza los atributos internos de la clase con los widgets de los tabs.
+        Si alguna ruta no existe, muestra un mensaje en el widget correspondiente.
+        """
+        # Pipeline tab
+        self.pipeline_tab.input_line.setText(getattr(self, "input_path", ""))
+        self.pipeline_tab.output_line.setText(getattr(self, "output_dir", ""))
+        idx_style = self.pipeline_tab.style_combo.findText(getattr(self, "style", "calibration"), Qt.MatchFlag.MatchFixedString)
+        if idx_style >= 0:
+            self.pipeline_tab.style_combo.setCurrentIndex(idx_style)
+        
+        # Custom parameters specific to PipelineTab's direct widgets
+        self.pipeline_tab.intensity_spin.setValue(getattr(self, "intensity", 50))
+        self.pipeline_tab.min_parcels_spin.setValue(getattr(self, "min_parcels", 1))
+        self.pipeline_tab.max_parcels_spin.setValue(getattr(self, "max_parcels", 10))
+        self.pipeline_tab.min_area_spin.setValue(getattr(self, "min_area", 0.3))
+        self.pipeline_tab.buffer_spin.setValue(getattr(self, "buffer_distance", -20))
+        self.pipeline_tab.min_distance_spin.setValue(getattr(self, "min_distance", 60.0))
+
+        # PO tab
+        po_path = getattr(self, "po_path", "") #
+        po_layer_from_config = getattr(self, "po_layer", "")  #
+        po_fields_from_config = getattr(self, "po_fields", []) #
+        
+        # self.log_text.append(f"[DEBUG SYNC_ATTRS_PO] Path: {po_path}, Layer: {po_layer_from_config}, Fields: {po_fields_from_config}")
+
+        if po_path and not os.path.exists(po_path): #
+            self.po_tab.po_path_line.setText(f"{po_path} [NOT FOUND - Check path or permissions]") #
+            self.po_tab.po_layer_combo.clear() #
+            self.po_tab.po_layer_combo.addItem("INVALID PATH") #
+            self.po_tab.po_fields_label.setText(", ".join(po_fields_from_config)) #
+        elif po_path: #
+            self.po_tab.po_path_line.setText(po_path) #
+            try:
+                layers = list_layers(po_path) #
+                
+                # --- DESCONECTAR SEÑAL ---
+                signal_disconnected_successfully = False
+                try:
+                    # Basado en tu _init_ui, la señal está conectada a _on_po_layer_changed
+                    self.po_tab.po_layer_combo.currentTextChanged.disconnect(self._on_po_layer_changed) #
+                    signal_disconnected_successfully = True
+                    # self.log_text.append("[DEBUG SYNC_ATTRS_PO] Disconnected _on_po_layer_changed from po_layer_combo")
+                except TypeError: 
+                    # self.log_text.append("[DEBUG SYNC_ATTRS_PO] po_layer_combo.currentTextChanged(self._on_po_layer_changed) was not connected or already disconnected.")
+                    pass 
+
+                self.po_tab.po_layer_combo.clear() #
+                self.po_tab.po_layer_combo.addItems(layers) #
+                
+                idx_layer = self.po_tab.po_layer_combo.findText(po_layer_from_config) #
+                if idx_layer >= 0: #
+                    self.po_tab.po_layer_combo.setCurrentIndex(idx_layer) #
+                elif po_layer_from_config: #
+                    self.po_tab.po_layer_combo.addItem(f"{po_layer_from_config} [NOT FOUND]") #
+                    self.po_tab.po_layer_combo.setCurrentText(f"{po_layer_from_config} [NOT FOUND]") #
+                elif layers: #
+                     self.po_tab.po_layer_combo.setCurrentIndex(0) #
+
+                # --- RECONECTAR SEÑAL ---
+                if signal_disconnected_successfully:
+                    self.po_tab.po_layer_combo.currentTextChanged.connect(self._on_po_layer_changed) #
+                    # self.log_text.append("[DEBUG SYNC_ATTRS_PO] Reconnected _on_po_layer_changed to po_layer_combo")
+
+            except Exception as e: #
+                self.log_text.append(f"[ERROR _sync_attrs_to_tabs] Error updating PO layer combo: {str(e)}") #
+                self.po_tab.po_layer_combo.clear() #
+                self.po_tab.po_layer_combo.addItem("ERROR LISTING LAYERS") #
+            
+            self.po_tab.po_fields_label.setText(", ".join(po_fields_from_config)) #
+        else: # No po_path
+            self.po_tab.po_path_line.setText("") #
+            self.po_tab.po_layer_combo.clear() #
+            self.po_tab.po_fields_label.setText("") #
+            
+        # Exclusion tab
+        self._update_exclusion_list() # Llama al método que ya actualiza la lista de exclusiones
+
+        # ConfigTab - Log Level
+        idx_log = self.config_tab.findChild(QComboBox, "log_level_combo").findText(self._current_log_level)
+        if idx_log >=0:
+            self.config_tab.findChild(QComboBox, "log_level_combo").setCurrentIndex(idx_log)
+
+
+    def _sync_tabs_to_attrs(self) -> None: #
+        """
+        Sincroniza los valores de los widgets de los tabs con los atributos internos de la clase.
+        """
+        # Pipeline tab
+        self.input_path = self.pipeline_tab.input_line.text()
+        self.output_dir = self.pipeline_tab.output_line.text()
+        self.style = self.pipeline_tab.style_combo.currentText()
+        
+        # Custom params from PipelineTab direct widgets
+        self.intensity = self.pipeline_tab.intensity_spin.value()
+        self.min_parcels = self.pipeline_tab.min_parcels_spin.value()
+        self.max_parcels = self.pipeline_tab.max_parcels_spin.value()
+        self.min_area = self.pipeline_tab.min_area_spin.value()
+        self.buffer_distance = self.pipeline_tab.buffer_spin.value()
+        self.min_distance = self.pipeline_tab.min_distance_spin.value()
+
+        # PO tab
+        self.po_path = self.po_tab.po_path_line.text()
+        current_po_layer_text = self.po_tab.po_layer_combo.currentText()
+        if "[NOT FOUND" in current_po_layer_text or "[ERROR" in current_po_layer_text or "[FILE PATH NOT SET]" in current_po_layer_text :
+            # If the combo box shows an error or placeholder,
+            # try to use the internally stored self.po_layer if it seems more valid,
+            # or set to an empty string to indicate no valid layer is selected.
+            # This depends on how you want to handle "last known good" vs. "current display".
+            # For saving, it's often better to save what's actually internally consistent.
+            # For now, let's assume if display is bad, internal might be better if it exists.
+             if hasattr(self, 'po_layer') and self.po_layer and not ("[NOT FOUND" in self.po_layer or "[ERROR" in self.po_layer or "[FILE PATH NOT SET]" in self.po_layer):
+                 self.po_layer = self.po_layer
+             else:
+                 self.po_layer = "" # Or None, depending on how your backend handles it
+        else:
+            self.po_layer = current_po_layer_text
+        # self.po_fields se actualiza directamente en _select_po_fields y _restore_gui_settings
+
+        # Exclusion list (self.exclusion_list) se actualiza en _add_exclusion y _remove_exclusion
+
 
     def _set_pipeline_params(self, params):
         # Carga los valores del dict de pipeline en los atributos y los tabs
@@ -564,56 +699,76 @@ class ParcelGeneratorApp(QMainWindow):
         self.log_text.append(f"[DEBUG] PO fields: {self.po_fields}")
         self._sync_attrs_to_tabs()
 
-    def _save_gui_settings(self) -> None:
-        self._sync_tabs_to_attrs()
+    def _save_gui_settings(self) -> None: #
+        self._sync_tabs_to_attrs() # Ensure attributes are up-to-date from GUI
         settings = {
-            "input_path": self.input_path,
-            "output_dir": self.output_dir,
-            "style": self.style,
-            "custom_params": {
-                "intensity": self.intensity,
-                "min_parcels": self.min_parcels,
-                "max_parcels": self.max_parcels,
-                "min_area": self.min_area,
-                "buffer_distance": self.buffer_distance,
-                "min_distance": self.min_distance
+            "input_path": self.input_path, #
+            "output_dir": self.output_dir, #
+            "style": self.style, #
+            "custom_params": { #
+                "intensity": self.intensity, #
+                "min_parcels": self.min_parcels, #
+                "max_parcels": self.max_parcels, #
+                "min_area": self.min_area, #
+                "buffer_distance": self.buffer_distance, #
+                "min_distance": self.min_distance #
             },
-            "po_config": {
-                "path": self.po_path,
-                "layer": self.po_layer,
-                "fields": self.po_fields
+            "po_config": { #
+                "path": self.po_path, #
+                "layer": self.po_layer, #
+                "fields": self.po_fields #
             },
-            "exclusion_list": self.exclusion_list,
-            "intensity_by_field": self.settings.get("intensity_by_field", {})
+            "exclusion_list": self.exclusion_list, #
+            "intensity_by_field": self.settings.get("intensity_by_field", {}), # Mantener de settings previos
+            "log_level": self._current_log_level # Guardar el nivel de log
         }
-        save_gui_settings(settings)
+        save_gui_settings(settings) #
         self.log_text.append("[INFO] Settings saved.")
-        self.config_tab.configChanged.emit(settings)
+        # self.config_tab.configChanged.emit(settings) # Emitir solo si ConfigTab lo necesita para algo más
+
 
     def _restore_gui_settings(self) -> None:
-        settings = load_gui_settings()
-        self.input_path = settings.get("input_path", "")
-        self.output_dir = settings.get("output_dir", "")
-        self.style = settings.get("style", "calibration")
-        params = settings.get("custom_params", {})
-        self.intensity = params.get("intensity", 50)
-        self.min_parcels = params.get("min_parcels", 1)
-        self.max_parcels = params.get("max_parcels", 10)
-        self.min_area = params.get("min_area", 0.3)
-        self.buffer_distance = params.get("buffer_distance", -20)
-        self.min_distance = params.get("min_distance", 60.0)
-        po_conf = settings.get("po_config", {})
-        self.po_path = po_conf.get("path", "")
-        self.po_layer = po_conf.get("layer", "")
-        self.po_fields = po_conf.get("fields", [])
-        self.exclusion_list = settings.get("exclusion_list", [])
-        self.settings = settings
-        self._sync_attrs_to_tabs()
+        settings = load_gui_settings() #
+        self.input_path = settings.get("input_path", "") #
+        self.output_dir = settings.get("output_dir", "") #
+        self.style = settings.get("style", "calibration") #
+
+        # Custom params for pipeline tab
+        custom_params_pipeline = settings.get("custom_params", {}) #
+        self.intensity = custom_params_pipeline.get("intensity", 50) #
+        self.min_parcels = custom_params_pipeline.get("min_parcels", 1) #
+        self.max_parcels = custom_params_pipeline.get("max_parcels", 10) #
+        self.min_area = custom_params_pipeline.get("min_area", 0.3) #
+        self.buffer_distance = custom_params_pipeline.get("buffer_distance", -20) #
+        self.min_distance = custom_params_pipeline.get("min_distance", 60.0) #
+
+        # PO Config
+        po_conf = settings.get("po_config", {}) #
+        self.po_path = po_conf.get("path", "") #
+        self.po_layer = po_conf.get("layer", "") #
+        self.po_fields = po_conf.get("fields", []) #
+
+        # Exclusion List
+        self.exclusion_list = settings.get("exclusion_list", []) #
+        
+        self.settings = settings # Store the loaded settings
+        self._sync_attrs_to_tabs() # Update all GUI elements from these attributes
         self.log_text.append("[INFO] Settings loaded.")
         self.config_tab.configChanged.emit(settings)
 
-    def _on_any_field_changed(self):
-        self._sync_tabs_to_attrs()
+    def _on_any_field_changed(self): # Aproximadamente línea 621 en el archivo que subiste
+        # Las líneas de depuración que te sugerí antes:
+        print(f"[DEBUG] In _on_any_field_changed. Type of self: {type(self)}")
+        print(f"[DEBUG] Does self have _get_pipeline_params? {hasattr(self, '_get_pipeline_params')}")
+        if hasattr(self, '_get_pipeline_params'):
+            print(f"[DEBUG] _get_pipeline_params attribute: {getattr(self, '_get_pipeline_params')}")
+
+        # Línea original que causa el error (ajústala al número de línea real en tu archivo ejecutado)
+        # self._sync_tabs_to_attrs() # <-- ELIMINAR ESTA LLAMADA REDUNDANTE
+                                     # Esta es la modificación principal de esta respuesta.
+        
+        # La siguiente línea es donde ocurría el AttributeError si _get_pipeline_params no se encontraba.
+        # Con la corrección de la redundancia, ahora depende de que _get_pipeline_params haga la sincronización.
         self._last_gui_hash = self._hash_dict(self._get_pipeline_params())
 
     def _on_log_level_changed(self, level):
