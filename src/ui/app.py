@@ -437,7 +437,7 @@ class ParcelGeneratorApp(QMainWindow):
         self.po_layer = self.po_tab.po_layer_combo.currentText()
         self.po_fields = [f.strip() for f in self.po_tab.po_fields_label.text().split(",") if f.strip()]
         # Exclusion tab
-        self.exclusion_list = [self.exclusion_tab.excl_list_widget.item(i).text() for i in range(self.exclusion_tab.excl_list_widget.count())]
+        # self.exclusion_list = [self.exclusion_tab.excl_list_widget.item(i).text() for i in range(self.exclusion_tab.excl_list_widget.count())]
 
     def _sync_attrs_to_tabs(self) -> None:
         """
