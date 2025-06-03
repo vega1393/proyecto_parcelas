@@ -43,9 +43,9 @@ CONTROL_CONFIG.update({
     "FIELDS": ["zc_pira", "tipo_uso", "tipouso", "apl", "id_predio"],
 })
 
-# Configuración para estilo "especial"
-ESPECIAL_CONFIG = BASE_CONFIG.copy()
-ESPECIAL_CONFIG.update({
+# Configuración para estilo "ecustom"
+Ecustom_CONFIG = BASE_CONFIG.copy()
+Ecustom_CONFIG.update({
     "USE_GRIDCODE": False,  # Ejemplo: no usar gridcode
     # Parámetros principales
     "INTENSIDAD": 50,

@@ -49,7 +49,7 @@ def save_gui_settings(settings: Dict[str, Any]) -> None:
     """
     try:
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings, f, indent=2)
+            json.dump(settings, f, indent=4)
     except Exception as e:
         # In production, log this error
         pass 

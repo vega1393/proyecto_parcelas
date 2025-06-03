@@ -66,7 +66,7 @@ def ejecutar_proceso(
         input_path: Ruta al archivo de entrada
         output_dir: Directorio de salida (opcional)
         entrega: Código de entrega (opcional)
-        estilo: Estilo de procesamiento ("calibracion", "control", "especial")
+        estilo: Estilo de procesamiento ("calibracion", "control", "ecustom")
         cfg_overrides: Sobrescrituras de configuración (opcional)
         progress_callback: Función para reportar progreso (value, status)
         

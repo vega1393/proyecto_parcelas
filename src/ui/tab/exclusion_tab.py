@@ -1,0 +1,22 @@
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QPushButton, QHBoxLayout
+
+class ExclusionTab(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+        excl_label = QLabel("Exclusion Layers:")
+        layout.addWidget(excl_label)
+        self.excl_list_widget = QListWidget()
+        layout.addWidget(self.excl_list_widget)
+        excl_add_btn = QPushButton("Add exclusion...")
+        excl_add_btn.setObjectName("add_exclusion_btn")
+        excl_remove_btn = QPushButton("Remove selected")
+        excl_remove_btn.setObjectName("remove_exclusion_btn")
+        excl_btns_layout = QHBoxLayout()
+        excl_btns_layout.addWidget(excl_add_btn)
+        excl_btns_layout.addWidget(excl_remove_btn)
+        layout.addLayout(excl_btns_layout)
+        self.setLayout(layout) 

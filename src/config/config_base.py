@@ -73,7 +73,7 @@ def get_config(estilo: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[
     Obtiene la configuración para un estilo específico, aplicando overrides si se proporcionan.
     
     Args:
-        estilo: Nombre del estilo ('calibration', 'control', 'special')
+        estilo: Nombre del estilo ('calibration', 'control', 'custom')
         overrides: Diccionario con valores que sobrescriben la configuración por defecto
         
     Returns:
@@ -83,7 +83,7 @@ def get_config(estilo: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[
     estilo_map = {
         "calibration": "calibracion",
         "control": "control",
-        "special": "especial"
+        "custom": "ecustom"
     }
     estilo_interno = estilo_map.get(estilo, estilo)
     if estilo_interno == "calibracion":
@@ -92,9 +92,9 @@ def get_config(estilo: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[
     elif estilo_interno == "control":
         from src.config.estilos import CONTROL_CONFIG
         cfg = CONTROL_CONFIG.copy()
-    elif estilo_interno == "especial":
-        from src.config.estilos import ESPECIAL_CONFIG
-        cfg = ESPECIAL_CONFIG.copy()
+    elif estilo_interno == "ecustom":
+        from src.config.estilos import Ecustom_CONFIG
+        cfg = Ecustom_CONFIG.copy()
     else:
         raise ValueError(f"Estilo no reconocido: {estilo}")
     

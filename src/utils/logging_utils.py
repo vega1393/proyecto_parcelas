@@ -44,6 +44,11 @@ def setup_logging(log_file: str, level: int = logging.INFO, use_queue: bool = Tr
     log_dir = os.path.dirname(log_file)
     if log_dir and not os.path.exists(log_dir):
         os.makedirs(log_dir)
+    # Lee el nivel de log desde la variable de entorno LOG_LEVEL si está presente
+    log_level_env = os.environ.get("LOG_LEVEL", None)
+    if log_level_env:
+        import logging
+        level = getattr(logging, log_level_env.upper(), logging.INFO)
     # Remove all handlers first
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
