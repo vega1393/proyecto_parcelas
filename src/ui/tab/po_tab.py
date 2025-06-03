@@ -1,12 +1,12 @@
 # src/ui/tab/po_tab.py
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, QComboBox, QHBoxLayout, QLabel
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, QComboBox, QHBoxLayout, QLabel, QScrollArea
 
 class POTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.init_ui()
-
-    def init_ui(self):
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        content = QWidget()
         layout = QVBoxLayout()
         self.po_path_line = QLineEdit()
         self.po_path_line.setPlaceholderText("Path to the Plan Operative file (e.g., .gpkg, .shp)") # Placeholder
@@ -31,8 +31,11 @@ class POTab(QWidget):
 
         form_layout.addRow("PO fields:", po_fields_layout)
         layout.addLayout(form_layout)
-        layout.addStretch() # Pushes content to the top
-        self.setLayout(layout)
+        content.setLayout(layout)
+        scroll.setWidget(content)
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(scroll)
+        self.setLayout(main_layout)
 
     def refresh_from_config(self, config: dict) -> None:
         """

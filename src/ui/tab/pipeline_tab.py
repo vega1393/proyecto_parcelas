@@ -1,12 +1,12 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox, QHBoxLayout, QProgressBar
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, QComboBox, QSpinBox, QDoubleSpinBox, QHBoxLayout, QProgressBar, QScrollArea
 from PyQt6.QtCore import pyqtSignal
 
 class PipelineTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.init_ui()
-
-    def init_ui(self):
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        content = QWidget()
         layout = QVBoxLayout()
         self.input_line = QLineEdit()
         self.input_browse_btn = QPushButton("Browse...")
@@ -61,4 +61,8 @@ class PipelineTab(QWidget):
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
         layout.addWidget(self.progress_bar)
-        self.setLayout(layout) 
+        content.setLayout(layout)
+        scroll.setWidget(content)
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(scroll)
+        self.setLayout(main_layout) 

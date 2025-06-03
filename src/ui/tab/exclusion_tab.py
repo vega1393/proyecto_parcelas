@@ -1,11 +1,11 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QPushButton, QHBoxLayout
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QPushButton, QHBoxLayout, QScrollArea
 
 class ExclusionTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.init_ui()
-
-    def init_ui(self):
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        content = QWidget()
         layout = QVBoxLayout()
         excl_label = QLabel("Exclusion Layers:")
         layout.addWidget(excl_label)
@@ -19,4 +19,8 @@ class ExclusionTab(QWidget):
         excl_btns_layout.addWidget(excl_add_btn)
         excl_btns_layout.addWidget(excl_remove_btn)
         layout.addLayout(excl_btns_layout)
-        self.setLayout(layout) 
+        content.setLayout(layout)
+        scroll.setWidget(content)
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(scroll)
+        self.setLayout(main_layout) 

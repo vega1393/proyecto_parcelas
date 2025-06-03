@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox, QScrollArea
 from PyQt6.QtCore import pyqtSignal
 
 class ConfigTab(QWidget):
@@ -6,9 +6,9 @@ class ConfigTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.init_ui()
-
-    def init_ui(self):
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        content = QWidget()
         layout = QVBoxLayout()
         export_btn = QPushButton("Export Config")
         export_btn.setObjectName("export_config_btn")
@@ -35,4 +35,8 @@ class ConfigTab(QWidget):
         log_level_layout.addWidget(log_level_label)
         log_level_layout.addWidget(log_level_combo)
         layout.addLayout(log_level_layout)
-        self.setLayout(layout) 
+        content.setLayout(layout)
+        scroll.setWidget(content)
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(scroll)
+        self.setLayout(main_layout) 

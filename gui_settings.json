@@ -1,6 +1,6 @@
 {
     "input_path": "C:/TRABAJO/06_proyectos/07_fasa2025/01_metricas/gpkg_e16_20250407_gridcode_metricas.gpkg",
-    "output_dir": "C:\\TRABAJO\\01_solicitud\\74_compilacion_proyectos_20250520\\01_gen_parcelas-vg\\proyecto_parcelas\\test01",
+    "output_dir": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test01",
     "style": "calibration",
     "custom_params": {
         "intensity": 50,
