@@ -1,7 +1,7 @@
 {
     "input_path": "C:/TRABAJO/06_proyectos/07_fasa2025/01_metricas/gpkg_e16_20250407_gridcode_metricas.gpkg",
-    "output_dir": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/proyecto_parcelas/test3",
-    "style": "custom",
+    "output_dir": "",
+    "style": "calibration",
     "custom_params": {
         "intensity": 50,
         "min_parcels": 1,
@@ -11,27 +11,10 @@
         "min_distance": 60.0
     },
     "po_config": {
-        "path": "C:/TRABAJO/06_proyectos/07_fasa2025/04_po_operativo/uso_suelo_from_arauco/uso_suelo_202412.gpkg",
-        "layer": "uso_suelo_historico_202412",
-        "fields": [
-            "idpredio",
-            "id_rodal",
-            "tipo_uso",
-            "apl",
-            "mpl"
-        ]
+        "path": "",
+        "layer": "",
+        "fields": []
     },
-    "exclusion_list": [
-        {
-            "path": "C:/TRABAJO/06_proyectos/07_fasa2025/03_capas_interes_fasa/raleos_20250421.gpkg",
-            "layer": "raleos_20250421",
-            "description": "raleos_20250421.gpkg"
-        },
-        {
-            "path": "C:/TRABAJO/06_proyectos/07_fasa2025/03_capas_interes_fasa/predios_rojos.gpkg",
-            "layer": "predios",
-            "description": "predios_rojos.gpkg"
-        }
-    ],
+    "exclusion_list": [],
     "intensity_by_field": {}
 }

@@ -21,7 +21,6 @@ from src.ui.tab.pipeline_tab import PipelineTab
 from src.ui.tab.po_tab import POTab
 from src.ui.tab.exclusion_tab import ExclusionTab
 from src.ui.tab.config_tab import ConfigTab
-from src.ui.tab.log_tab import LogTab
 
 print("[DEBUG] INICIO ui/app.py")
 
@@ -52,19 +51,21 @@ class ParcelGeneratorApp(QMainWindow):
         """
         central_widget = QWidget()
         tabs = QTabWidget()
-        # Instancia los tabs modulares
         self.pipeline_tab = PipelineTab()
         self.po_tab = POTab()
         self.exclusion_tab = ExclusionTab()
         self.config_tab = ConfigTab()
-        self.log_tab = LogTab()
         tabs.addTab(self.pipeline_tab, "Pipeline")
         tabs.addTab(self.po_tab, "Plan Operative (PO)")
         tabs.addTab(self.exclusion_tab, "Exclusion Layers")
         tabs.addTab(self.config_tab, "Configuration")
-        tabs.addTab(self.log_tab, "Log")
         layout = QVBoxLayout()
         layout.addWidget(tabs)
+        # --- Log transversal ---
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setPlaceholderText("Log and messages will appear here...")
+        layout.addWidget(self.log_text)
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
@@ -107,8 +108,6 @@ class ParcelGeneratorApp(QMainWindow):
         self.config_tab.findChild(QPushButton, "save_settings_btn").clicked.connect(self._save_gui_settings)
         self.config_tab.findChild(QPushButton, "load_settings_btn").clicked.connect(self._restore_gui_settings)
         self.config_tab.findChild(QComboBox, "log_level_combo").currentTextChanged.connect(self._on_log_level_changed)
-
-        # Log: nada que conectar, solo acceso a self.log_tab.log_text
 
     # --- PO and Exclusion logic ---
     def _select_po_file(self) -> None:
@@ -227,7 +226,7 @@ class ParcelGeneratorApp(QMainWindow):
         if self._imported_config_path and self._imported_config_hash == gui_hash:
             use_imported = True
             config_path_to_use = self._imported_config_path
-            self.log_tab.log_text.append(f"[INFO] Using imported config for pipeline: {config_path_to_use}")
+            self.log_text.append(f"[INFO] Using imported config for pipeline: {config_path_to_use}")
             self._last_temp_config_path = None
         else:
             # Genera un nuevo JSON temporal
@@ -236,7 +235,7 @@ class ParcelGeneratorApp(QMainWindow):
             with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json", dir=json_config_dir) as tmp:
                 json.dump(gui_params, tmp, indent=2)
                 config_path_to_use = tmp.name
-            self.log_tab.log_text.append(f"[INFO] Using new generated config for pipeline: {config_path_to_use}")
+            self.log_text.append(f"[INFO] Using new generated config for pipeline: {config_path_to_use}")
             self._last_temp_config_path = config_path_to_use
 
         cfg_overrides = {}
@@ -268,7 +267,7 @@ class ParcelGeneratorApp(QMainWindow):
         }
 
         self.pipeline_tab.progress_bar.setValue(0)
-        self.log_tab.log_text.append("[INFO] Starting processing (QProcess)...")
+        self.log_text.append("[INFO] Starting processing (QProcess)...")
         self.pipeline_tab.run_btn.setEnabled(False)
         self.pipeline_tab.stop_btn.setEnabled(True)
         self.process = QProcess(self)
@@ -296,7 +295,7 @@ class ParcelGeneratorApp(QMainWindow):
             if not line:
                 continue
             
-            self.log_tab.log_text.append(f"[FROM PROCESS STDOUT] {line}") # Mostrar toda la línea para depuración
+            self.log_text.append(f"[FROM PROCESS STDOUT] {line}") # Mostrar toda la línea para depuración
             try:
                 msg = json.loads(line)
                 msg_type = msg.get("type", "").lower()
@@ -305,10 +304,10 @@ class ParcelGeneratorApp(QMainWindow):
                     value = msg.get("value", 0)
                     status = msg.get("status", "")
                     self.pipeline_tab.progress_bar.setValue(value)
-                    self.log_tab.log_text.append(f"[PROGRESS] {value}% - {status}")
+                    self.log_text.append(f"[PROGRESS] {value}% - {status}")
                 elif msg_type == "success":
                     self.pipeline_tab.progress_bar.setValue(100)
-                    self.log_tab.log_text.append(f"[SUCCESS] {msg.get('message', 'Processing completed successfully.')}")
+                    self.log_text.append(f"[SUCCESS] {msg.get('message', 'Processing completed successfully.')}")
                     QMessageBox.information(self, "Process Completed", msg.get('message', "Parcel generation completed successfully."))
                     # self._on_process_finished() No llamar aquí, se llama en el slot 'finished'
                 elif msg_type == "error":
@@ -318,20 +317,20 @@ class ParcelGeneratorApp(QMainWindow):
                     traceback_info_formatted = "\n".join(traceback_lines_list)
                     # --- FIN DEL CAMBIO ---
                     full_error_details = f"{error_message}\n\nTraceback (from process):\n{traceback_info_formatted}"
-                    self.log_tab.log_text.append(f"[ERROR FROM PROCESS] {full_error_details}")
+                    self.log_text.append(f"[ERROR FROM PROCESS] {full_error_details}")
                     QMessageBox.critical(self, "Error During Processing", full_error_details)
                 elif msg_type == "log":  # Para mensajes de logging genéricos desde el script
                     level = msg.get("level", "info").upper()
                     logger_name = msg.get("logger", "process")
                     log_message = msg.get("message", "")
-                    self.log_tab.log_text.append(f"[{level} - {logger_name}] {log_message}")
+                    self.log_text.append(f"[{level} - {logger_name}] {log_message}")
                 else: # Si no es JSON o tipo desconocido, mostrar como texto plano
-                    self.log_tab.log_text.append(f"[STDOUT UNPARSED] {line}")
+                    self.log_text.append(f"[STDOUT UNPARSED] {line}")
             except json.JSONDecodeError:
                 # Si la línea no es un JSON válido, simplemente agrégala al log como texto.
-                self.log_tab.log_text.append(f"[STDOUT NON-JSON] {line}")
+                self.log_text.append(f"[STDOUT NON-JSON] {line}")
             except Exception as e:
-                self.log_tab.log_text.append(f"[ERROR PARSING STDOUT] Exception: {str(e)} - Original line: {line}")
+                self.log_text.append(f"[ERROR PARSING STDOUT] Exception: {str(e)} - Original line: {line}")
 
 
     def _on_process_stderr(self):
@@ -341,19 +340,19 @@ class ParcelGeneratorApp(QMainWindow):
             for line in error_data.splitlines():
                 line = line.strip()
                 if line:
-                    self.log_tab.log_text.append(f"[STDERR FROM PROCESS] {line}")
+                    self.log_text.append(f"[STDERR FROM PROCESS] {line}")
 
     def _on_process_finished(self):
         exit_code = self.process.exitCode()
         exit_status = self.process.exitStatus() # NormalExit o CrashExit
 
-        self.log_tab.log_text.append(f"[INFO] Process finished. Exit Code: {exit_code}, Exit Status: {exit_status.name}")
+        self.log_text.append(f"[INFO] Process finished. Exit Code: {exit_code}, Exit Status: {exit_status.name}")
         
         if exit_status == QProcess.ExitStatus.CrashExit:
-            self.log_tab.log_text.append("[ERROR] The process crashed.")
+            self.log_text.append("[ERROR] The process crashed.")
             QMessageBox.warning(self, "Process Crashed", "The processing script crashed unexpectedly.")
         elif exit_code != 0:
-             self.log_tab.log_text.append(f"[WARNING] Process finished with non-zero exit code: {exit_code}.")
+             self.log_text.append(f"[WARNING] Process finished with non-zero exit code: {exit_code}.")
              # No mostrar QMessageBox aquí si ya se mostró uno por un error JSON
         
         self.pipeline_tab.run_btn.setEnabled(True)
@@ -364,9 +363,9 @@ class ParcelGeneratorApp(QMainWindow):
             try:
                 if os.path.exists(temp_file_to_delete):
                     os.remove(temp_file_to_delete)
-                    self.log_tab.log_text.append(f"[INFO] Deleted temporary config file: {temp_file_to_delete}")
+                    self.log_text.append(f"[INFO] Deleted temporary config file: {temp_file_to_delete}")
             except Exception as e:
-                self.log_tab.log_text.append(f"[WARNING] Could not delete temporary config file {temp_file_to_delete}: {e}")
+                self.log_text.append(f"[WARNING] Could not delete temporary config file {temp_file_to_delete}: {e}")
         self._last_temp_config_path = None
         self.process = None
 
@@ -381,7 +380,7 @@ class ParcelGeneratorApp(QMainWindow):
         if reply != QMessageBox.StandardButton.Yes:
             return
         if self.process is not None and self.process.state() != QProcess.ProcessState.NotRunning:
-            self.log_tab.log_text.append("[INFO] Stopping process and all children...")
+            self.log_text.append("[INFO] Stopping process and all children...")
             try:
                 import psutil
                 pid = self.process.processId()
@@ -407,16 +406,16 @@ class ParcelGeneratorApp(QMainWindow):
                 else:
                     self.process.kill()
             except ImportError:
-                self.log_tab.log_text.append("[WARNING] psutil not installed, using QProcess.kill(). For more robust termination, install psutil.")
+                self.log_text.append("[WARNING] psutil not installed, using QProcess.kill(). For more robust termination, install psutil.")
                 self.process.kill()
             except Exception as e:
-                self.log_tab.log_text.append(f"[ERROR] Failed to stop all processes robustly: {str(e)}. Using QProcess.kill().")
+                self.log_text.append(f"[ERROR] Failed to stop all processes robustly: {str(e)}. Using QProcess.kill().")
                 self.process.kill()
             self.process.waitForFinished(3000)
             self.pipeline_tab.run_btn.setEnabled(True)
             self.pipeline_tab.stop_btn.setEnabled(False)
         else:
-            self.log_tab.log_text.append("[WARNING] No process is running.")
+            self.log_text.append("[WARNING] No process is running.")
 
     def _sync_tabs_to_attrs(self) -> None:
         """
@@ -442,6 +441,7 @@ class ParcelGeneratorApp(QMainWindow):
     def _sync_attrs_to_tabs(self) -> None:
         """
         Sincroniza los atributos internos de la clase con los widgets de los tabs.
+        Si alguna ruta no existe, muestra un mensaje en el widget correspondiente.
         """
         # Pipeline tab
         self.pipeline_tab.input_line.setText(getattr(self, "input_path", ""))
@@ -456,15 +456,50 @@ class ParcelGeneratorApp(QMainWindow):
         self.pipeline_tab.buffer_spin.setValue(getattr(self, "buffer_distance", -20))
         self.pipeline_tab.min_distance_spin.setValue(getattr(self, "min_distance", 60.0))
         # PO tab
-        self.po_tab.po_path_line.setText(getattr(self, "po_path", ""))
-        idx_layer = self.po_tab.po_layer_combo.findText(getattr(self, "po_layer", ""))
-        if idx_layer >= 0:
-            self.po_tab.po_layer_combo.setCurrentIndex(idx_layer)
-        self.po_tab.po_fields_label.setText(", ".join(getattr(self, "po_fields", [])))
+        po_path = getattr(self, "po_path", "")
+        po_layer = getattr(self, "po_layer", "")
+        po_fields = getattr(self, "po_fields", [])
+        if po_path and not os.path.exists(po_path):
+            self.po_tab.po_path_line.setText(f"{po_path} [NOT FOUND]")
+            self.po_tab.po_layer_combo.clear()
+            self.po_tab.po_layer_combo.addItem("INVALID PATH")
+            self.po_tab.po_fields_label.setText(", ".join(po_fields))
+        elif po_path:
+            self.po_tab.po_path_line.setText(po_path)
+            try:
+                layers = list_layers(po_path)
+                self.po_tab.po_layer_combo.clear()
+                self.po_tab.po_layer_combo.addItems(layers)
+                idx_layer = self.po_tab.po_layer_combo.findText(po_layer)
+                if idx_layer >= 0:
+                    self.po_tab.po_layer_combo.setCurrentIndex(idx_layer)
+                else:
+                    self.po_tab.po_layer_combo.addItem(f"{po_layer} [NOT FOUND]")
+                    self.po_tab.po_layer_combo.setCurrentIndex(self.po_tab.po_layer_combo.count()-1)
+            except Exception:
+                self.po_tab.po_layer_combo.clear()
+                self.po_tab.po_layer_combo.addItem("INVALID PATH")
+            self.po_tab.po_fields_label.setText(", ".join(po_fields))
+        else:
+            self.po_tab.po_path_line.setText("")
+            self.po_tab.po_layer_combo.clear()
+            self.po_tab.po_fields_label.setText("")
         # Exclusion tab
         self.exclusion_tab.excl_list_widget.clear()
         for excl in getattr(self, "exclusion_list", []):
-            self.exclusion_tab.excl_list_widget.addItem(excl)
+            if isinstance(excl, dict):
+                path = excl.get("path", "")
+                desc = excl.get("description", os.path.basename(path) or "Unknown")
+                layer = excl.get("layer")
+                if path and not os.path.exists(path):
+                    text = f"{desc} [NOT FOUND]"
+                else:
+                    text = desc
+                if layer:
+                    text += f" ({layer})"
+                self.exclusion_tab.excl_list_widget.addItem(text)
+            else:
+                self.exclusion_tab.excl_list_widget.addItem(str(excl))
 
     def _get_pipeline_params(self):
         self._sync_tabs_to_attrs()
@@ -542,7 +577,7 @@ class ParcelGeneratorApp(QMainWindow):
             "intensity_by_field": self.settings.get("intensity_by_field", {})
         }
         save_gui_settings(settings)
-        self.log_tab.log_text.append("[INFO] Settings saved.")
+        self.log_text.append("[INFO] Settings saved.")
 
     def _restore_gui_settings(self) -> None:
         settings = load_gui_settings()
@@ -563,7 +598,7 @@ class ParcelGeneratorApp(QMainWindow):
         self.exclusion_list = settings.get("exclusion_list", [])
         self.settings = settings
         self._sync_attrs_to_tabs()
-        self.log_tab.log_text.append("[INFO] Settings loaded.")
+        self.log_text.append("[INFO] Settings loaded.")
 
     def _on_any_field_changed(self):
         self._sync_tabs_to_attrs()
@@ -571,7 +606,7 @@ class ParcelGeneratorApp(QMainWindow):
 
     def _on_log_level_changed(self, level):
         self._current_log_level = level
-        self.log_tab.log_text.append(f"[INFO] Log level set to: {level}")
+        self.log_text.append(f"[INFO] Log level set to: {level}")
 
     def _export_pipeline_config(self):
         params = self._get_pipeline_params()
@@ -580,9 +615,9 @@ class ParcelGeneratorApp(QMainWindow):
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
                     json.dump(params, f, indent=4)
-                self.log_tab.log_text.append(f"[INFO] Pipeline config exported to: {file_path}")
+                self.log_text.append(f"[INFO] Pipeline config exported to: {file_path}")
             except Exception as e:
-                self.log_tab.log_text.append(f"[ERROR] Failed to export config: {str(e)}")
+                self.log_text.append(f"[ERROR] Failed to export config: {str(e)}")
 
     def _import_pipeline_config(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Import Pipeline Config", "", "JSON Files (*.json)")
@@ -594,10 +629,10 @@ class ParcelGeneratorApp(QMainWindow):
                 self._imported_config_path = file_path
                 self._imported_config_hash = self._hash_dict(params)
                 self._last_gui_hash = self._hash_dict(self._get_pipeline_params())
-                self.log_tab.log_text.append(f"[INFO] Pipeline config imported from: {file_path}")
-                self.log_tab.log_text.append(f"[INFO] Ready to run with imported config: {file_path}")
+                self.log_text.append(f"[INFO] Pipeline config imported from: {file_path}")
+                self.log_text.append(f"[INFO] Ready to run with imported config: {file_path}")
             except Exception as e:
-                self.log_tab.log_text.append(f"[ERROR] Failed to import config: {str(e)}")
+                self.log_text.append(f"[ERROR] Failed to import config: {str(e)}")
 
     def _hash_dict(self, d):
         import hashlib
