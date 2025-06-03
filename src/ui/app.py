@@ -383,12 +383,14 @@ class ParcelGeneratorApp(QMainWindow):
                     # self._on_process_finished() No llamar aquí, se llama en el slot 'finished'
                 elif msg_type == "error":
                     error_message = msg.get('message', 'An unknown error occurred.')
-                    traceback_info = msg.get('traceback', '')
-                    full_error_details = f"{error_message}\n\nTraceback (from process):\n{traceback_info}"
+                    # <--- CAMBIO AQUÍ: obtener 'traceback_lines' y unir
+                    traceback_lines_list = msg.get('traceback_lines', []) 
+                    traceback_info_formatted = "\n".join(traceback_lines_list)
+                    # --- FIN DEL CAMBIO ---
+                    full_error_details = f"{error_message}\n\nTraceback (from process):\n{traceback_info_formatted}"
                     self.log_text.append(f"[ERROR FROM PROCESS] {full_error_details}")
                     QMessageBox.critical(self, "Error During Processing", full_error_details)
-                    # self._on_process_finished() No llamar aquí
-                elif msg_type == "log": # Para mensajes de logging genéricos desde el script
+                elif msg_type == "log":  # Para mensajes de logging genéricos desde el script
                     level = msg.get("level", "info").upper()
                     logger_name = msg.get("logger", "process")
                     log_message = msg.get("message", "")

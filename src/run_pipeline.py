@@ -27,17 +27,20 @@ try:
     print("[DEBUG] RUN_PIPELINE: IMPORT PIPELINE AND FUNCTION OK")
 except Exception as e:
     error_message = f"Failed during import sequence in run_pipeline.py: {str(e)}"
-    tb_message = traceback.format_exc()
+    # tb_message = traceback.format_exc()
+    tb_lines = traceback.format_exc().splitlines()
     # Intenta enviar como JSON, pero también imprime en crudo por robustez
     try:
-        print(json.dumps({"type": "error", "message": error_message, "traceback": tb_message}), flush=True)
+        # <--- CAMBIO AQUÍ: enviar 'traceback_lines' en lugar de 'traceback'
+        print(json.dumps({"type": "error", "message": error_message, "traceback_lines": tb_lines}), flush=True)
     except Exception as json_e:
         sys.stderr.write(f"JSON DUMP FAILED in run_pipeline: {str(json_e)}\n")
     # Imprime directamente a stderr también, lo cual QProcess debería capturar.
+    # Para stderr, podemos mantener el formato original multi-línea
     sys.stderr.write(f"RAW ERROR in run_pipeline.py: {error_message}\n")
-    sys.stderr.write(f"RAW TRACEBACK in run_pipeline.py:\n{tb_message}\n")
-    sys.stderr.flush() # Asegura que se escriba inmediatamente
-    sys.exit(1) # Es crucial salir para que QProcess.finished se active y el GUI sepa que falló.
+    sys.stderr.write(f"RAW TRACEBACK in run_pipeline.py:\n{traceback.format_exc()}\n") # Usar format_exc() aquí está bien
+    sys.stderr.flush() 
+    sys.exit(1)  # Es crucial salir para que QProcess.finished se active y el GUI sepa que falló.
 
 # Verificación adicional: si ejecutar_proceso_func no se asignó, es un error.
 if not ejecutar_proceso_func:
