@@ -45,7 +45,8 @@ def aplicar_exclusiones(
     result_gdf = gdf.copy()
 
     for capa in capas_exclusion:
-        logger.info(f"Procesando capa de exclusión: {capa['descripcion']}")
+        desc = capa.get('descripcion', 'unknown')
+        logger.info(f"Procesando capa de exclusión: {desc}")
         try:
             # Importar la función leer_capa
             from src.io.lectura import leer_capa
@@ -55,11 +56,11 @@ def aplicar_exclusiones(
 
             # CRS
             exclusion_gdf = verificar_y_transformar_crs(
-                exclusion_gdf, capa['descripcion'], crs_target)
+                exclusion_gdf, desc, crs_target)
 
             # Reparar
             exclusion_gdf = reparar_geometrias(
-                exclusion_gdf, capa['descripcion'])
+                exclusion_gdf, desc)
 
             # Aplicar filtros específicos si es necesario
             if capa.get('filtro_apl') or capa.get('filtro_uso'):
@@ -72,8 +73,7 @@ def aplicar_exclusiones(
 
                 # Si es la capa PO (detectado por la descripción), invertimos la lógica:
                 # Queremos EXCLUIR lo que NO cumple con el filtro
-                is_po_layer = "Plan Operativo (PO)" in capa.get(
-                    'descripcion', '')
+                is_po_layer = "Plan Operativo (PO)" in desc
 
                 if is_po_layer:
                     logger.info(
@@ -199,7 +199,7 @@ def aplicar_exclusiones(
             gc.collect()
 
         except Exception as e:
-            logger.error(f"Error al procesar {capa['descripcion']}: {str(e)}")
+            logger.error(f"Error al procesar {desc}: {str(e)}")
             continue
 
     result_gdf = reparar_geometrias(result_gdf, "resultado post-exclusiones")

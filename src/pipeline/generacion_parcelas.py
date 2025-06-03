@@ -13,6 +13,7 @@ from functools import partial
 from shapely.geometry import Point, Polygon
 
 from src.utils.geo_utils import generar_grid_puntos, filtrar_puntos_por_poligono
+from src.utils.logging_utils import setup_worker_logging
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,7 @@ def procesar_grupo(
     min_distance,
     max_intentos
 ):
+    setup_worker_logging()  # Asegura logging multiproceso
     """
     Procesa un grupo para generar parcelas.
     

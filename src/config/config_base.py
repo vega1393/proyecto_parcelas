@@ -73,19 +73,26 @@ def get_config(estilo: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[
     Obtiene la configuración para un estilo específico, aplicando overrides si se proporcionan.
     
     Args:
-        estilo: Nombre del estilo ('calibracion', 'control', 'especial')
+        estilo: Nombre del estilo ('calibration', 'control', 'special')
         overrides: Diccionario con valores que sobrescriben la configuración por defecto
         
     Returns:
         Diccionario con la configuración completa
     """
-    if estilo == "calibracion":
+    # Mapeo de nombres en inglés a español para compatibilidad
+    estilo_map = {
+        "calibration": "calibracion",
+        "control": "control",
+        "special": "especial"
+    }
+    estilo_interno = estilo_map.get(estilo, estilo)
+    if estilo_interno == "calibracion":
         from src.config.estilos import CALIBRATION_CONFIG
         cfg = CALIBRATION_CONFIG.copy()
-    elif estilo == "control":
+    elif estilo_interno == "control":
         from src.config.estilos import CONTROL_CONFIG
         cfg = CONTROL_CONFIG.copy()
-    elif estilo == "especial":
+    elif estilo_interno == "especial":
         from src.config.estilos import ESPECIAL_CONFIG
         cfg = ESPECIAL_CONFIG.copy()
     else:

@@ -4,6 +4,9 @@ Módulo para la gestión de rutas de archivos.
 
 import os
 from typing import Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def configurar_rutas(input_path: str, output_dir: Optional[str] = None) -> Dict[str, str]:

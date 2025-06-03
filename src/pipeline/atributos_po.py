@@ -8,6 +8,7 @@ import pyogrio
 from typing import Dict, Any, Optional, List, Tuple
 
 from src.utils.geo_utils import verificar_y_transformar_crs
+from src.io.lectura import leer_capa
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,6 @@ def asignar_atributos_po(
         GeoDataFrame con los atributos del PO y el ID FASA asignados
     """
     logger.info("Iniciando asignación de atributos desde PO...")
-    
-    # Importar la función leer_capa
-    from src.io.lectura import leer_capa
     
     # Cargar PO
     try:

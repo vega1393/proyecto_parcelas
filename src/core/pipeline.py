@@ -4,22 +4,52 @@ Executes the full workflow for parcel generation.
 """
 
 import logging
+logging.debug('[DEBUG] después de importar logging')
 import os
+logging.debug('[DEBUG] después de importar os')
 import geopandas as gpd
+logging.debug('[DEBUG] después de importar geopandas')
 import pyogrio
+logging.debug('[DEBUG] después de importar pyogrio')
 from typing import Dict, Any, Optional, List, Tuple, Callable
+logging.debug('[DEBUG] después de importar typing')
 
 from src.utils.logging_utils import setup_logging
+logging.debug('[DEBUG] después de importar utils.logging_utils')
 from src.utils.geo_utils import verificar_y_transformar_crs
+logging.debug('[DEBUG] después de importar utils.geo_utils')
 from src.config.config_base import get_config
+logging.debug('[DEBUG] después de importar config.config_base')
 from src.io.rutas import configurar_rutas
+logging.debug('[DEBUG] después de importar io.rutas')
 from src.pipeline.filtros import aplicar_filtros_iniciales, calcular_gridcode
+logging.debug('[DEBUG] después de importar pipeline.filtros')
 from src.pipeline.calculo_parcelas import calcular_cantidad_de_parcelas
+logging.debug('[DEBUG] después de importar pipeline.calculo_parcelas')
 from src.pipeline.exclusiones import aplicar_exclusiones
+logging.debug('[DEBUG] después de importar pipeline.exclusiones')
 from src.pipeline.generacion_parcelas import generar_parcelas, generar_poligonos_parcelas
+logging.debug('[DEBUG] después de importar pipeline.generacion_parcelas')
 from src.pipeline.atributos_po import asignar_atributos_po, reordenar_columnas
+logging.debug('[DEBUG] después de importar pipeline.atributos_po')
 from src.pipeline.analisis import analizar_perdidas_parcelas
+logging.debug('[DEBUG] después de importar pipeline.analisis')
 
+print("[DEBUG] INICIO core/pipeline.py")
+
+def normalize_exclusion_layers(layers):
+    normalized = []
+    for layer in layers:
+        norm = {}
+        if "path" in layer:
+            norm["ruta"] = layer["path"]
+        if "layer" in layer:
+            norm["capa"] = layer["layer"]
+        if "description" in layer:
+            norm["descripcion"] = layer["description"]
+        # Copia cualquier otra clave relevante
+        normalized.append(norm)
+    return normalized
 
 def ejecutar_proceso(
     input_path: str,
@@ -54,6 +84,10 @@ def ejecutar_proceso(
 
     # 1) Obtener configuración según estilo
     cfg = get_config(estilo, cfg_overrides)
+
+    # Normalizar claves de capas de exclusión si existen
+    if "CAPAS_EXCLUSION" in cfg and cfg["CAPAS_EXCLUSION"]:
+        cfg["CAPAS_EXCLUSION"] = normalize_exclusion_layers(cfg["CAPAS_EXCLUSION"])
 
     # 2) Configurar rutas, logging
     rutas = configurar_rutas(input_path, output_dir)

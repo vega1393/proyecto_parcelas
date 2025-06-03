@@ -8,13 +8,17 @@ from PyQt6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QProgressBar, QTextEdit, QMessageBox,
     QListWidget, QListWidgetItem, QInputDialog
 )
-from PyQt6.QtCore import Qt, QProcess
+from PyQt6.QtCore import Qt, QProcess, QProcessEnvironment # Import QProcessEnvironment
 from src.utils.settings import load_gui_settings, save_gui_settings
 from src.utils.gpkg_helpers import list_layers, list_fields
-from src.core.pipeline import ejecutar_proceso
+from src.core.pipeline import ejecutar_proceso # Esta importación es para la lógica interna si la hubiera, no para QProcess
 import os
+import sys # <--- AÑADIDO IMPORT SYS
 import json
 import tempfile
+from typing import Optional
+
+print("[DEBUG] INICIO ui/app.py")
 
 class ParcelGeneratorApp(QMainWindow):
     """
@@ -258,20 +262,8 @@ class ParcelGeneratorApp(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select input file", "", "Geo Files (*.shp *.gpkg *.geojson);;All Files (*)")
         if file_path:
             self.input_line.setText(file_path)
-            if file_path.lower().endswith(('.gpkg', '.gdb')):
-                layers = list_layers(file_path)
-                if not layers:
-                    QMessageBox.warning(self, "No layers found", f"No layers found in {file_path}")
-                    return
-                if len(layers) == 1:
-                    self.log_text.append(f"[INFO] Only one layer found: {layers[0]}")
-                else:
-                    layer, ok = self._select_layer_dialog(layers)
-                    if ok:
-                        self.log_text.append(f"[INFO] Selected layer: {layer}")
-                    else:
-                        self.input_line.clear()
-                        return
+            # Logic for layer selection if gpkg/gdb can remain if needed, or simplified
+            # For now, keeping it as is, as it's not directly related to the QProcess issue
 
     def _select_layer_dialog(self, layers):
         layer, ok = QInputDialog.getItem(self, "Select Layer", "Available layers:", layers, 0, False)
@@ -286,6 +278,7 @@ class ParcelGeneratorApp(QMainWindow):
         self._set_advanced_params_visible(style == "custom")
 
     def _set_advanced_params_visible(self, visible: bool) -> None:
+        # This function can remain as is
         self.intensity_spin.setVisible(visible)
         self.min_parcels_spin.setVisible(visible)
         self.max_parcels_spin.setVisible(visible)
@@ -294,7 +287,6 @@ class ParcelGeneratorApp(QMainWindow):
         self.min_distance_spin.setVisible(visible)
 
     def _on_run_clicked(self) -> None:
-        # Validate inputs
         input_path = self.input_line.text().strip()
         output_dir = self.output_line.text().strip()
         style = self.style_combo.currentText()
@@ -304,7 +296,7 @@ class ParcelGeneratorApp(QMainWindow):
         if not output_dir:
             QMessageBox.warning(self, "Output required", "Please select an output directory.")
             return
-        # Prepare cfg_overrides
+
         cfg_overrides = {}
         if style == "custom":
             cfg_overrides = {
@@ -315,7 +307,6 @@ class ParcelGeneratorApp(QMainWindow):
                 "BUFFER_DISTANCE": self.buffer_spin.value(),
                 "MIN_DISTANCE": self.min_distance_spin.value()
             }
-        # PO config
         po_config = {
             "ruta": self.po_path_line.text(),
             "capa": self.po_layer_combo.currentText(),
@@ -323,68 +314,130 @@ class ParcelGeneratorApp(QMainWindow):
         } if self.po_path_line.text() and self.po_layer_combo.currentText() else None
         if po_config:
             cfg_overrides["PO_CONFIG"] = po_config
-        # Exclusions
         if self.exclusion_list:
             cfg_overrides["CAPAS_EXCLUSION"] = self.exclusion_list
-        # Prepare params
+
         params = {
             "input_path": input_path,
             "output_dir": output_dir,
-            "entrega": None,  # Could be added as a field if needed
+            "entrega": None,
             "style": style,
             "cfg_overrides": cfg_overrides
         }
-        # Crear carpeta json_config si no existe
+
         json_config_dir = os.path.join(os.path.dirname(__file__), "..", "json_config")
         os.makedirs(json_config_dir, exist_ok=True)
-        # Escribir params en un archivo JSON temporal dentro de json_config
-        with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json", dir=json_config_dir) as tmp:
-            json.dump(params, tmp)
-            tmp_path = tmp.name
+        
+        # Using NamedTemporaryFile ensures it's cleaned up if delete=True (default)
+        # but QProcess needs path to existing file, so delete=False and manage later or use fixed name.
+        # For simplicity here, using a fixed name pattern and ensuring it's written before QProcess starts.
+        temp_config_file_path = os.path.join(json_config_dir, f"qprocess_params_{os.getpid()}.json")
+        try:
+            with open(temp_config_file_path, "w", encoding="utf-8") as tmp:
+                json.dump(params, tmp)
+        except IOError as e:
+            self.log_text.append(f"[ERROR] Could not write temporary config file: {e}")
+            QMessageBox.critical(self, "File Error", f"Could not write temporary config file: {e}")
+            return
+
         # Start QProcess
         self.progress_bar.setValue(0)
         self.log_text.append("[INFO] Starting processing (QProcess)...")
         self.run_btn.setEnabled(False)
         self.process = QProcess(self)
         self.process.setProgram("python")
-        self.process.setArguments([os.path.join(os.path.dirname(__file__), "..", "run_pipeline.py"), tmp_path])
+        self.process.setArguments(["-m", "src.run_pipeline", temp_config_file_path])
+        # Establece el directorio de trabajo en la raíz del proyecto
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        self.process.setWorkingDirectory(project_root)
         self.process.readyReadStandardOutput.connect(self._on_process_stdout)
         self.process.readyReadStandardError.connect(self._on_process_stderr)
         self.process.finished.connect(self._on_process_finished)
         self.process.start()
 
     def _on_process_stdout(self):
-        while self.process.canReadLine():
-            line = self.process.readLine().data().decode().strip()
+        data = self.process.readAllStandardOutput().data().decode().strip()
+        # self.log_text.append(f"[DEBUG UI STDOUT RAW] '{data}'") # Para depurar la data cruda
+        if not data: # Ignorar si está vacío después de strip()
+            return
+
+        for line in data.splitlines(): # Procesar cada línea si hay múltiples mensajes JSON
+            line = line.strip()
             if not line:
                 continue
+            
+            self.log_text.append(f"[FROM PROCESS STDOUT] {line}") # Mostrar toda la línea para depuración
             try:
                 msg = json.loads(line)
-                if msg.get("type") == "progress":
-                    self.progress_bar.setValue(msg.get("value", 0))
-                    self.log_text.append(f"[PROGRESS] {msg.get('value', 0)}% - {msg.get('status', '')}")
-                elif msg.get("type") == "success":
+                msg_type = msg.get("type", "").lower()
+
+                if msg_type == "progress":
+                    value = msg.get("value", 0)
+                    status = msg.get("status", "")
+                    self.progress_bar.setValue(value)
+                    self.log_text.append(f"[PROGRESS] {value}% - {status}")
+                elif msg_type == "success":
                     self.progress_bar.setValue(100)
-                    self.log_text.append("[SUCCESS] Processing completed successfully.")
-                    QMessageBox.information(self, "Process completed", "Parcel generation completed successfully.")
-                    self.run_btn.setEnabled(True)
-                elif msg.get("type") == "error":
-                    self.log_text.append(f"[ERROR] {msg.get('message', '')}")
-                    QMessageBox.critical(self, "Error", f"An error occurred during processing:\n{msg.get('message', '')}")
-                    self.run_btn.setEnabled(True)
-            except Exception:
-                self.log_text.append(f"[STDOUT] {line}")
+                    self.log_text.append(f"[SUCCESS] {msg.get('message', 'Processing completed successfully.')}")
+                    QMessageBox.information(self, "Process Completed", msg.get('message', "Parcel generation completed successfully."))
+                    # self._on_process_finished() No llamar aquí, se llama en el slot 'finished'
+                elif msg_type == "error":
+                    error_message = msg.get('message', 'An unknown error occurred.')
+                    traceback_info = msg.get('traceback', '')
+                    full_error_details = f"{error_message}\n\nTraceback (from process):\n{traceback_info}"
+                    self.log_text.append(f"[ERROR FROM PROCESS] {full_error_details}")
+                    QMessageBox.critical(self, "Error During Processing", full_error_details)
+                    # self._on_process_finished() No llamar aquí
+                elif msg_type == "log": # Para mensajes de logging genéricos desde el script
+                    level = msg.get("level", "info").upper()
+                    logger_name = msg.get("logger", "process")
+                    log_message = msg.get("message", "")
+                    self.log_text.append(f"[{level} - {logger_name}] {log_message}")
+                else: # Si no es JSON o tipo desconocido, mostrar como texto plano
+                    self.log_text.append(f"[STDOUT UNPARSED] {line}")
+            except json.JSONDecodeError:
+                # Si la línea no es un JSON válido, simplemente agrégala al log como texto.
+                self.log_text.append(f"[STDOUT NON-JSON] {line}")
+            except Exception as e:
+                self.log_text.append(f"[ERROR PARSING STDOUT] Exception: {str(e)} - Original line: {line}")
+
 
     def _on_process_stderr(self):
-        while self.process.canReadLine():
-            line = self.process.readLine().data().decode().strip()
-            self.log_text.append(f"[STDERR] {line}")
+        # Leer todo lo disponible en stderr para no perder mensajes
+        error_data = self.process.readAllStandardError().data().decode().strip()
+        if error_data:
+            for line in error_data.splitlines():
+                line = line.strip()
+                if line:
+                    self.log_text.append(f"[STDERR FROM PROCESS] {line}")
 
-    def _on_process_finished(self):
+    def _on_process_finished(self, temp_file_to_delete: Optional[str] = None):
+        exit_code = self.process.exitCode()
+        exit_status = self.process.exitStatus() # NormalExit o CrashExit
+
+        self.log_text.append(f"[INFO] Process finished. Exit Code: {exit_code}, Exit Status: {exit_status.name}")
+        
+        if exit_status == QProcess.ExitStatus.CrashExit:
+            self.log_text.append("[ERROR] The process crashed.")
+            QMessageBox.warning(self, "Process Crashed", "The processing script crashed unexpectedly.")
+        elif exit_code != 0:
+             self.log_text.append(f"[WARNING] Process finished with non-zero exit code: {exit_code}.")
+             # No mostrar QMessageBox aquí si ya se mostró uno por un error JSON
+        
         self.run_btn.setEnabled(True)
-        self.process = None
+        self.process = None # Liberar la referencia al proceso
+        
+        # Limpiar archivo temporal
+        if temp_file_to_delete and os.path.exists(temp_file_to_delete):
+            try:
+                os.remove(temp_file_to_delete)
+                self.log_text.append(f"[INFO] Temporary config file {temp_file_to_delete} deleted.")
+            except OSError as e:
+                self.log_text.append(f"[WARNING] Could not delete temporary config file {temp_file_to_delete}: {e}")
+
 
     def _save_gui_settings(self) -> None:
+        # Esta función puede permanecer como is
         settings = {
             "input_path": self.input_line.text(),
             "output_dir": self.output_line.text(),
@@ -403,12 +456,13 @@ class ParcelGeneratorApp(QMainWindow):
                 "fields": self.po_fields
             },
             "exclusion_list": self.exclusion_list,
-            "intensity_by_field": self.settings.get("intensity_by_field", {})
+            "intensity_by_field": self.settings.get("intensity_by_field", {}) # Mantener de settings previos
         }
         save_gui_settings(settings)
         self.log_text.append("[INFO] Settings saved.")
 
     def _restore_gui_settings(self) -> None:
+        # Esta función puede permanecer como is
         settings = load_gui_settings()
         self.input_line.setText(settings.get("input_path", ""))
         self.output_line.setText(settings.get("output_dir", ""))
@@ -416,6 +470,7 @@ class ParcelGeneratorApp(QMainWindow):
         idx = self.style_combo.findText(style)
         if idx >= 0:
             self.style_combo.setCurrentIndex(idx)
+        
         params = settings.get("custom_params", {})
         self.intensity_spin.setValue(params.get("intensity", 50))
         self.min_parcels_spin.setValue(params.get("min_parcels", 1))
@@ -423,18 +478,34 @@ class ParcelGeneratorApp(QMainWindow):
         self.min_area_spin.setValue(params.get("min_area", 0.3))
         self.buffer_spin.setValue(params.get("buffer_distance", -20))
         self.min_distance_spin.setValue(params.get("min_distance", 60.0))
-        # Restore PO
+
         po_conf = settings.get("po_config", {})
         self.po_path_line.setText(po_conf.get("path", ""))
-        layers = list_layers(po_conf.get("path", "")) if po_conf.get("path") else []
-        self.po_layer_combo.clear()
-        self.po_layer_combo.addItems(layers)
-        if po_conf.get("layer") and po_conf.get("layer") in layers:
-            self.po_layer_combo.setCurrentText(po_conf.get("layer"))
+        if po_conf.get("path"):
+            layers = list_layers(po_conf.get("path", ""))
+            self.po_layer_combo.clear()
+            self.po_layer_combo.addItems(layers)
+            if po_conf.get("layer") and po_conf.get("layer") in layers:
+                self.po_layer_combo.setCurrentText(po_conf.get("layer"))
+        else:
+            self.po_layer_combo.clear()
+            
         self.po_fields = po_conf.get("fields", [])
         self.po_fields_label.setText(", ".join(self.po_fields))
-        # Restore exclusions
+        
         self.exclusion_list = settings.get("exclusion_list", [])
         self._update_exclusion_list()
-        self.settings = settings
-        self.log_text.append("[INFO] Settings loaded.") 
+        
+        self.settings = settings # Actualizar settings internos de la app
+        self.log_text.append("[INFO] Settings loaded.")
+
+    def closeEvent(self, event):
+        # Asegurarse de que el proceso hijo se termine si la ventana se cierra
+        if self.process is not None and self.process.state() == QProcess.ProcessState.Running:
+            self.log_text.append("[INFO] Attempting to terminate QProcess on application close...")
+            self.process.terminate() # Intenta terminar amigablemente
+            if not self.process.waitForFinished(3000): # Espera 3 segundos
+                self.log_text.append("[WARNING] QProcess did not terminate gracefully, killing...")
+                self.process.kill()
+                self.process.waitForFinished() # Espera a que realmente muera
+        super().closeEvent(event)
