@@ -11,22 +11,26 @@
         "min_distance": 60.0
     },
     "po_config": {
-        "path": "C:/TRABAJO/06_proyectos/07_fasa2025/04_po_operativo/uso_suelo_from_arauco/uso_suelo_202412.gpkg",
-        "layer": "uso_suelo_historico_202412",
-        "fields": []
+        "ruta": "C:/TRABAJO/06_proyectos/07_fasa2025/04_po_operativo/uso_suelo_from_arauco/uso_suelo_202412.gpkg",
+        "capa": "uso_suelo_historico_202412",
+        "campos": [
+            "idpredio",
+            "id_rodal",
+            "tipo_uso",
+            "apl",
+            "mpl"
+        ]
     },
     "exclusion_list": [
         {
-            "path": "C:/TRABAJO/06_proyectos/07_fasa2025/03_capas_interes_fasa/raleos_20250421.gpkg",
-            "layer": "raleos_20250421",
-            "description": "raleos_20250421.gpkg"
+            "ruta": "C:/TRABAJO/06_proyectos/07_fasa2025/03_capas_interes_fasa/raleos_20250421.gpkg",
+            "capa": "raleos_20250421",
+            "descripcion": "raleos_20250421.gpkg"
         },
         {
-            "path": "C:/TRABAJO/06_proyectos/07_fasa2025/03_capas_interes_fasa/predios_rojos.gpkg",
-            "layer": "predios",
-            "description": "predios_rojos.gpkg"
+            "ruta": "C:/TRABAJO/06_proyectos/07_fasa2025/03_capas_interes_fasa/predios_rojos.gpkg",
+            "capa": "predios",
+            "descripcion": "predios_rojos.gpkg"
         }
-    ],
-    "intensity_by_field": {},
-    "log_level": "INFO"
+    ]
 }

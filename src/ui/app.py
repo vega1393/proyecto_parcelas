@@ -1,808 +1,314 @@
-"""
-Main window for the Parcel Generator application using PyQt6.
-"""
+# src/ui/app.py
 
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QFileDialog, QComboBox,
-    QSpinBox, QDoubleSpinBox, QProgressBar, QTextEdit, QMessageBox,
-    QListWidget, QListWidgetItem, QInputDialog, QTabWidget, QDialog, QSplitter
-)
-from PyQt6.QtCore import Qt, QProcess, QProcessEnvironment # Import QProcessEnvironment
-from src.utils.settings import load_gui_settings, save_gui_settings
-from src.utils.gpkg_helpers import list_layers, list_fields
-from src.core.pipeline import ejecutar_proceso # Esta importación es para la lógica interna si la hubiera, no para QProcess
 import os
-import sys # <--- AÑADIDO IMPORT SYS
+import sys
 import json
 import tempfile
-from typing import Optional
+from typing import Dict, Any, Optional, List
+
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
+    QMessageBox, QTabWidget, QSplitter, QPushButton, QFileDialog,
+    QComboBox
+)
+from PyQt6.QtCore import Qt, QProcess, QProcessEnvironment
+
+from src.utils.settings import load_gui_settings, save_gui_settings
 from src.ui.tab.pipeline_tab import PipelineTab
 from src.ui.tab.po_tab import POTab
 from src.ui.tab.exclusion_tab import ExclusionTab
 from src.ui.tab.config_tab import ConfigTab
-from src.ui.dialogs.po_fields_dialog import POFieldsDialog
-
-print("[DEBUG] INICIO ui/app.py")
 
 class ParcelGeneratorApp(QMainWindow):
     """
     Main application window for the Parcel Generator.
+    Acts as a coordinator for the UI tabs and the processing pipeline.
     """
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Parcel Generator")
-        self.setMinimumSize(900, 650)
-        self.settings = load_gui_settings()
-        self.po_layer = None
-        self.po_fields = []
-        self.exclusion_list = self.settings.get("exclusion_list", [])
-        self.process = None
-        self._imported_config_path = None  # Ruta del último JSON importado
-        self._imported_config_hash = None  # Hash del contenido importado
-        self._last_gui_hash = None         # Hash del último estado de la GUI
-        self._last_temp_config_path = None  # Ruta del último archivo temporal generado
-        self._current_log_level = "INFO"
+        self.setMinimumSize(900, 700)
+
+        self.process: Optional[QProcess] = None
+        self._last_temp_config_path: Optional[str] = None
+        # [CORRECCIÓN] Diccionario central para mantener el estado de la configuración.
+        self.pipeline_config: Dict[str, Any] = {}
+
         self._init_ui()
+        self._connect_signals()
         self._restore_gui_settings()
 
     def _init_ui(self) -> None:
-        """
-        Initializes the main UI layout.
-        """
+        """Initializes the main UI layout and sub-widgets (tabs)."""
         central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
         splitter = QSplitter(Qt.Orientation.Vertical)
-        # --- Tabs arriba ---
+
         tabs = QTabWidget()
         self.pipeline_tab = PipelineTab()
         self.po_tab = POTab()
         self.exclusion_tab = ExclusionTab()
         self.config_tab = ConfigTab()
+
         tabs.addTab(self.pipeline_tab, "Pipeline")
         tabs.addTab(self.po_tab, "Plan Operative (PO)")
         tabs.addTab(self.exclusion_tab, "Exclusion Layers")
         tabs.addTab(self.config_tab, "Configuration")
-        # --- Logs abajo con botón limpiar ---
+
         log_widget = QWidget()
-        log_layout = QVBoxLayout()
+        log_layout = QVBoxLayout(log_widget)
         log_btn_layout = QHBoxLayout()
-        self.clear_log_btn = QPushButton("Limpiar logs")
-        self.clear_log_btn.setToolTip("Borra todo el contenido de la consola de logs.")
+        self.clear_log_btn = QPushButton("Clear Logs")
         log_btn_layout.addWidget(self.clear_log_btn)
         log_btn_layout.addStretch(1)
-        log_layout.addLayout(log_btn_layout)
+        
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setPlaceholderText("Log and messages will appear here...")
+        self.log_text.setPlaceholderText("Logs and messages will appear here...")
+        
+        log_layout.addLayout(log_btn_layout)
         log_layout.addWidget(self.log_text)
-        log_widget.setLayout(log_layout)
-        # --- Splitter ---
+
         splitter.addWidget(tabs)
         splitter.addWidget(log_widget)
-        splitter.setSizes([600, 200]) # Altura inicial sugerida
-        main_layout = QVBoxLayout()
+        splitter.setSizes([450, 250])
         main_layout.addWidget(splitter)
-        central_widget.setLayout(main_layout)
-        self.setCentralWidget(central_widget)
-        # --- Conexión botón limpiar logs ---
+
+    def _connect_signals(self) -> None:
+        """Connects signals from tabs and other widgets to the main window's slots."""
+        self.pipeline_tab.runRequested.connect(self._run_pipeline)
+        self.pipeline_tab.stop_btn.clicked.connect(self._stop_pipeline)
         self.clear_log_btn.clicked.connect(self.log_text.clear)
-
-        # --- Conexión de señales y eventos entre tabs y lógica global ---
-        # Pipeline: Run/Stop/Browse
-        self.pipeline_tab.run_btn.clicked.connect(self._on_run_clicked)
-        self.pipeline_tab.stop_btn.clicked.connect(self._on_stop_clicked)
-        self.pipeline_tab.input_line.textChanged.connect(self._on_any_field_changed)
-        self.pipeline_tab.output_line.textChanged.connect(self._on_any_field_changed)
-        self.pipeline_tab.style_combo.currentTextChanged.connect(self._on_any_field_changed)
-        self.pipeline_tab.intensity_spin.valueChanged.connect(self._on_any_field_changed)
-        self.pipeline_tab.min_parcels_spin.valueChanged.connect(self._on_any_field_changed)
-        self.pipeline_tab.max_parcels_spin.valueChanged.connect(self._on_any_field_changed)
-        self.pipeline_tab.min_area_spin.valueChanged.connect(self._on_any_field_changed)
-        self.pipeline_tab.buffer_spin.valueChanged.connect(self._on_any_field_changed)
-        self.pipeline_tab.min_distance_spin.valueChanged.connect(self._on_any_field_changed)
-        # Browse buttons
-        self.pipeline_tab.input_line.setPlaceholderText("Input file path...")
-        self.pipeline_tab.output_line.setPlaceholderText("Output directory...")
-        self.pipeline_tab.input_browse_btn.clicked.connect(self._select_input_file)
-        self.pipeline_tab.output_browse_btn.clicked.connect(self._select_output_dir)
-        self.pipeline_tab.input_line.mouseDoubleClickEvent = lambda event: self._select_input_file()
-        self.pipeline_tab.output_line.mouseDoubleClickEvent = lambda event: self._select_output_dir()
-
-        # PO tab: campos y browse
-        self.po_tab.po_path_line.textChanged.connect(self._on_any_field_changed)
-        self.po_tab.po_layer_combo.currentTextChanged.connect(self._on_po_layer_changed) # <--- CONECTAR ESTO
-        self.po_tab.po_fields_btn.clicked.connect(self._select_po_fields) # Esta conexión ya debería existir
-        self.po_tab.po_file_btn.clicked.connect(self._select_po_file)
-        # Browse PO file
-        self.po_tab.po_path_line.mouseDoubleClickEvent = lambda event: self._select_po_file()
         
-        # Exclusiones: agregar/quitar
-        self.exclusion_tab.excl_list_widget.model().rowsInserted.connect(self._on_any_field_changed)
-        self.exclusion_tab.excl_list_widget.model().rowsRemoved.connect(self._on_any_field_changed)
-        # Botones de exclusión
-        self.exclusion_tab.findChild(QPushButton, "add_exclusion_btn").clicked.connect(self._add_exclusion)
-        self.exclusion_tab.findChild(QPushButton, "remove_exclusion_btn").clicked.connect(self._remove_exclusion)
+        # [CORRECCIÓN] Añadir las conexiones que faltaban.
+        # Esto asegura que la configuración central se actualiza cuando el usuario
+        # cambia algo en las pestañas de PO o Exclusiones.
+        self.po_tab.configChanged.connect(self._on_po_config_changed)
+        self.exclusion_tab.configChanged.connect(self._on_exclusions_changed)
 
-        # Configuración: export/import/settings
-        self.config_tab.findChild(QPushButton, "export_config_btn").clicked.connect(self._export_pipeline_config)
-        self.config_tab.findChild(QPushButton, "import_config_btn").clicked.connect(self._import_pipeline_config)
+        self.config_tab.findChild(QPushButton, "export_config_btn").clicked.connect(self._export_config)
+        self.config_tab.findChild(QPushButton, "import_config_btn").clicked.connect(self._import_config)
         self.config_tab.findChild(QPushButton, "save_settings_btn").clicked.connect(self._save_gui_settings)
         self.config_tab.findChild(QPushButton, "load_settings_btn").clicked.connect(self._restore_gui_settings)
-        self.config_tab.findChild(QComboBox, "log_level_combo").currentTextChanged.connect(self._on_log_level_changed)
-        self.config_tab.configChanged.connect(self._on_config_changed)
 
-    # --- PO and Exclusion logic ---
-    def _select_po_file(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select PO file", "", "Geo Files (*.shp *.gpkg *.geojson *.gdb);;All Files (*)")
-        if file_path:
-            self.po_tab.po_path_line.setText(file_path)
-            layers = list_layers(file_path)
-            self.po_tab.po_layer_combo.clear()
-            self.po_tab.po_layer_combo.addItems(layers)
-            if layers:
-                self.po_tab.po_layer_combo.setCurrentIndex(0)
-            self.po_fields = []
-            self.po_tab.po_fields_label.setText("")
+    # --- SLOTS FOR HANDLING CONFIGURATION CHANGES ---
 
-    def _on_po_layer_changed(self, layer_name: str) -> None: #
+    def _on_po_config_changed(self, po_config: Dict[str, Any]) -> None:
         """
-        Handles changes in the PO layer selection.
-        Resets selected PO fields when the layer changes.
+        [CORRECCIÓN] Este slot se activa cuando la config de PO cambia.
         """
-        self.log_text.append(f"[DEBUG] PO Layer changed to: {layer_name}")
-        # self.po_layer se actualiza en _get_pipeline_params o al cargar settings.
-        # Lo importante aquí es resetear los campos si la capa cambia,
-        # porque los campos de la capa anterior pueden no ser válidos para la nueva.
-        if self.po_tab.po_layer_combo.currentText() != self.po_layer: # Si realmente cambió respecto al estado
-            self.po_fields = [] # Reset selected fields
-            self.po_tab.po_fields_label.setText("") # Clear the label
-            self._on_any_field_changed() # Signal that GUI state has changed
+        self.pipeline_config['PO_CONFIG'] = po_config
+        self.log_text.append("[INFO] PO configuration updated.")
 
-        self.po_layer = layer_name # Actualizar el atributo interno
-
-    def _select_po_fields(self) -> None:
+    def _on_exclusions_changed(self, exclusion_list: List[Dict[str, Any]]) -> None:
         """
-        Opens a custom dialog to select fields from the PO layer.
+        [CORRECCIÓN] Este slot se activa cuando la lista de exclusión cambia.
         """
-        file_path = self.po_tab.po_path_line.text()
-        layer_name = self.po_tab.po_layer_combo.currentText()
+        self.pipeline_config['CAPAS_EXCLUSION'] = exclusion_list
+        self.log_text.append(f"[INFO] Exclusion list updated.")
+        
+    # --- Pipeline Execution ---
+    
+    def _run_pipeline(self) -> None:
+        """Assembles the full config and starts the pipeline in a QProcess."""
+        full_config = self._get_full_pipeline_config()
 
-        if not file_path or not os.path.exists(file_path):
-            QMessageBox.warning(self, "PO File Error", "Please select a valid PO file first.")
+        if not full_config.get("input_path") or not os.path.exists(full_config.get("input_path")):
+            QMessageBox.warning(self, "Input Error", "Please select a valid input file.")
             return
-        if not layer_name or "[NOT FOUND" in layer_name or "INVALID" in layer_name: # Check for invalid layer entries
-            QMessageBox.warning(self, "PO Layer Error", "Please select a valid layer from the PO file.")
+        if not full_config.get("output_dir"):
+            QMessageBox.warning(self, "Output Error", "Please select an output directory.")
             return
 
-        self.log_text.append(f"[DEBUG _select_po_fields] Listing fields for: '{file_path}', Layer: '{layer_name}'")
         try:
-            available_fields = list_fields(file_path, layer_name)
-            self.log_text.append(f"[DEBUG _select_po_fields] Available fields: {available_fields}")
-        except Exception as e:
-            self.log_text.append(f"[ERROR _select_po_fields] Error listing fields: {str(e)}")
-            QMessageBox.critical(self, "Field Listing Error", f"Could not list fields for layer '{layer_name}':\n{str(e)}")
-            return
-
-        if not available_fields:
-            QMessageBox.information(self, "No Fields", f"No attribute fields found in layer '{layer_name}'.")
-            return
-
-        # `self.po_fields` contiene los campos actualmente seleccionados (cargados o previamente elegidos)
-        dialog = POFieldsDialog(available_fields, self.po_fields, self)
-        
-        # Conectar la señal del diálogo a un método para manejar los campos seleccionados
-        # dialog.fieldsSelected.connect(self._handle_selected_po_fields) # Alternativa si prefieres señal/slot
-        
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            newly_selected_fields = dialog.get_selected_fields()
-            if newly_selected_fields != self.po_fields:
-                self.po_fields = newly_selected_fields
-                self.po_tab.po_fields_label.setText(", ".join(self.po_fields))
-                self._on_any_field_changed() # To track GUI state changes
-                self.log_text.append(f"[INFO] PO fields updated to: {self.po_fields}")
-            else:
-                 self.log_text.append("[INFO] PO fields selection unchanged.")
-        else:
-            self.log_text.append("[INFO] PO fields selection cancelled.")
-
-    # Si usas la señal fieldsSelected desde el diálogo, necesitarías este método:
-    # def _handle_selected_po_fields(self, selected_fields: List[str]):
-    #     if selected_fields != self.po_fields:
-    #         self.po_fields = selected_fields
-    #         self.po_tab.po_fields_label.setText(", ".join(self.po_fields))
-    #         self._on_any_field_changed()
-    #         self.log_text.append(f"[INFO] PO fields updated via signal to: {self.po_fields}")
-    #     else:
-    #         self.log_text.append("[INFO] PO fields selection unchanged (via signal).")
-
-    def _add_exclusion(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select exclusion file", "", "Geo Files (*.shp *.gpkg *.geojson *.gdb);;All Files (*)")
-        if not file_path:
-            return
-        layer = None
-        if file_path.lower().endswith((".gpkg", ".gdb")):
-            layers = list_layers(file_path)
-            if not layers:
-                QMessageBox.warning(self, "No layers found", f"No layers found in {file_path}")
-                return
-            if len(layers) == 1:
-                layer = layers[0]
-            else:
-                layer, ok = self._select_layer_dialog(layers)
-                if not ok:
-                    return
-        desc, ok = QInputDialog.getText(self, "Exclusion description", "Description:", text=os.path.basename(file_path))
-        if not ok:
-            return
-        exclusion = {"path": file_path, "layer": layer, "description": desc}
-        self.exclusion_list.append(exclusion)
-        self._update_exclusion_list()
-
-    def _remove_exclusion(self) -> None:
-        selected = self.exclusion_tab.excl_list_widget.currentRow()
-        if selected >= 0:
-            self.exclusion_list.pop(selected)
-            self._update_exclusion_list()
-
-    def _update_exclusion_list(self) -> None:
-        self.exclusion_tab.excl_list_widget.clear()
-        for excl in self.exclusion_list:
-            text = excl.get("description", os.path.basename(excl.get("path", "Unknown")))
-            if excl.get("layer"):
-                text += f" ({excl['layer']})"
-            self.exclusion_tab.excl_list_widget.addItem(QListWidgetItem(text))
-
-    # --- Existing logic ---
-    def _select_input_file(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select input file", "", "Geo Files (*.shp *.gpkg *.geojson);;All Files (*)")
-        if file_path:
-            self.pipeline_tab.input_line.setText(file_path)
-            # Logic for layer selection if gpkg/gdb can remain if needed, or simplified
-            # For now, keeping it as is, as it's not directly related to the QProcess issue
-
-    def _select_layer_dialog(self, layers):
-        layer, ok = QInputDialog.getItem(self, "Select Layer", "Available layers:", layers, 0, False)
-        return layer, ok
-
-    def _select_output_dir(self) -> None:
-        dir_path = QFileDialog.getExistingDirectory(self, "Select output directory", "")
-        if dir_path:
-            self.pipeline_tab.output_line.setText(dir_path)
-
-    def _on_style_changed(self, style: str) -> None:
-        self._set_advanced_params_visible(style == "custom")
-
-    def _set_advanced_params_visible(self, visible: bool) -> None:
-        # This function can remain as is
-        self.pipeline_tab.intensity_spin.setVisible(visible)
-        self.pipeline_tab.min_parcels_spin.setVisible(visible)
-        self.pipeline_tab.max_parcels_spin.setVisible(visible)
-        self.pipeline_tab.min_area_spin.setVisible(visible)
-        self.pipeline_tab.buffer_spin.setVisible(visible)
-        self.pipeline_tab.min_distance_spin.setVisible(visible)
-
-    def _on_run_clicked(self) -> None:
-        input_path = self.pipeline_tab.input_line.text().strip()
-        output_dir = self.pipeline_tab.output_line.text().strip()
-        style = self.pipeline_tab.style_combo.currentText()
-        if not input_path or not os.path.exists(input_path):
-            QMessageBox.warning(self, "Input required", "Please select a valid input file.")
-            return
-        if not output_dir:
-            QMessageBox.warning(self, "Output required", "Please select an output directory.")
-            return
-
-        gui_params = self._get_pipeline_params()
-        gui_hash = self._hash_dict(gui_params)
-        use_imported = False
-        config_path_to_use = None
-        if self._imported_config_path and self._imported_config_hash == gui_hash:
-            use_imported = True
-            config_path_to_use = self._imported_config_path
-            self.log_text.append(f"[INFO] Using imported config for pipeline: {config_path_to_use}")
-            self._last_temp_config_path = None
-        else:
-            # Genera un nuevo JSON temporal
             json_config_dir = os.path.join(os.path.dirname(__file__), "..", "json_config")
             os.makedirs(json_config_dir, exist_ok=True)
-            with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json", dir=json_config_dir) as tmp:
-                json.dump(gui_params, tmp, indent=2)
-                config_path_to_use = tmp.name
-            self.log_text.append(f"[INFO] Using new generated config for pipeline: {config_path_to_use}")
-            self._last_temp_config_path = config_path_to_use
+            with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json", dir=json_config_dir, encoding="utf-8") as tmp:
+                json.dump(full_config, tmp, indent=4)
+                self._last_temp_config_path = tmp.name
+        except Exception as e:
+            QMessageBox.critical(self, "Config Error", f"Failed to create temporary config file: {e}")
+            return
 
-        cfg_overrides = {}
-        if style == "custom":
-            cfg_overrides = {
-                "INTENSITY": self.pipeline_tab.intensity_spin.value(),
-                "MIN_PARCELS": self.pipeline_tab.min_parcels_spin.value(),
-                "MAX_PARCELS": self.pipeline_tab.max_parcels_spin.value(),
-                "MIN_AREA": self.pipeline_tab.min_area_spin.value(),
-                "BUFFER_DISTANCE": self.pipeline_tab.buffer_spin.value(),
-                "MIN_DISTANCE": self.pipeline_tab.min_distance_spin.value()
-            }
-        po_config = {
-            "ruta": self.po_tab.po_path_line.text(),
-            "capa": self.po_tab.po_layer_combo.currentText(),
-            "campos": self.po_fields
-        } if self.po_tab.po_path_line.text() and self.po_tab.po_layer_combo.currentText() else None
-        if po_config:
-            cfg_overrides["PO_CONFIG"] = po_config
-        if self.exclusion_list:
-            cfg_overrides["CAPAS_EXCLUSION"] = self.exclusion_list
+        self.log_text.append(f"[INFO] Starting pipeline with config: {self._last_temp_config_path}")
+        self.pipeline_tab.set_running_state(is_running=True)
 
-        params = {
-            "input_path": input_path,
-            "output_dir": output_dir,
-            "entrega": None,
-            "style": style,
-            "cfg_overrides": cfg_overrides
-        }
-
-        self.pipeline_tab.progress_bar.setValue(0)
-        self.log_text.append("[INFO] Starting processing (QProcess)...")
-        self.pipeline_tab.run_btn.setEnabled(False)
-        self.pipeline_tab.stop_btn.setEnabled(True)
         self.process = QProcess(self)
-        self.process.setProgram("python")
-        self.process.setArguments(["-m", "src.run_pipeline", config_path_to_use])
+        self.process.setProgram(sys.executable)
+        self.process.setArguments(["-m", "src.run_pipeline", self._last_temp_config_path])
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         self.process.setWorkingDirectory(project_root)
-        # Set log level as environment variable
-        env = self.process.processEnvironment() or QProcessEnvironment.systemEnvironment()
-        env.insert("LOG_LEVEL", self._current_log_level)
+        
+        env = QProcessEnvironment.systemEnvironment()
+        log_level = self.config_tab.findChild(QComboBox, "log_level_combo").currentText()
+        env.insert("LOG_LEVEL", log_level)
         self.process.setProcessEnvironment(env)
+        
         self.process.readyReadStandardOutput.connect(self._on_process_stdout)
         self.process.readyReadStandardError.connect(self._on_process_stderr)
         self.process.finished.connect(self._on_process_finished)
         self.process.start()
 
-    def _on_process_stdout(self):
-        data = self.process.readAllStandardOutput().data().decode("utf-8", errors="replace").strip()
-        # self.log_text.append(f"[DEBUG UI STDOUT RAW] '{data}'") # Para depurar la data cruda
-        if not data: # Ignorar si está vacío después de strip()
-            return
+    def _stop_pipeline(self) -> None:
+        if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
+            reply = QMessageBox.question(
+                self, "Confirm Stop", "Are you sure you want to stop the process?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.log_text.append("[INFO] Terminating process...")
+                self.process.kill()
 
-        for line in data.splitlines(): # Procesar cada línea si hay múltiples mensajes JSON
-            line = line.strip()
-            if not line:
-                continue
-            
-            self.log_text.append(f"[FROM PROCESS STDOUT] {line}") # Mostrar toda la línea para depuración
+    # --- QProcess Handlers ---
+    def _on_process_stdout(self) -> None:
+        # ... (sin cambios)
+        data = self.process.readAllStandardOutput().data().decode("utf-8", errors="replace")
+        for line in data.strip().splitlines():
             try:
                 msg = json.loads(line)
                 msg_type = msg.get("type", "").lower()
-
                 if msg_type == "progress":
-                    value = msg.get("value", 0)
-                    status = msg.get("status", "")
-                    self.pipeline_tab.progress_bar.setValue(value)
-                    self.log_text.append(f"[PROGRESS] {value}% - {status}")
+                    self.pipeline_tab.update_progress(msg.get("value", 0))
+                    self.log_text.append(f"[PROGRESS] {msg.get('value', 0)}% - {msg.get('status', '')}")
+                elif msg_type == "log":
+                    self.log_text.append(f"[{msg.get('level', 'info').upper()}] {msg.get('message', '')}")
                 elif msg_type == "success":
-                    self.pipeline_tab.progress_bar.setValue(100)
-                    self.log_text.append(f"[SUCCESS] {msg.get('message', 'Processing completed successfully.')}")
-                    QMessageBox.information(self, "Process Completed", msg.get('message', "Parcel generation completed successfully."))
-                    # self._on_process_finished() No llamar aquí, se llama en el slot 'finished'
+                    self.pipeline_tab.update_progress(100)
+                    QMessageBox.information(self, "Success", msg.get("message", "Process completed."))
                 elif msg_type == "error":
-                    error_message = msg.get('message', 'An unknown error occurred.')
-                    # <--- CAMBIO AQUÍ: obtener 'traceback_lines' y unir
-                    traceback_lines_list = msg.get('traceback_lines', []) 
-                    traceback_info_formatted = "\n".join(traceback_lines_list)
-                    # --- FIN DEL CAMBIO ---
-                    full_error_details = f"{error_message}\n\nTraceback (from process):\n{traceback_info_formatted}"
-                    self.log_text.append(f"[ERROR FROM PROCESS] {full_error_details}")
-                    QMessageBox.critical(self, "Error During Processing", full_error_details)
-                elif msg_type == "log":  # Para mensajes de logging genéricos desde el script
-                    level = msg.get("level", "info").upper()
-                    logger_name = msg.get("logger", "process")
-                    log_message = msg.get("message", "")
-                    self.log_text.append(f"[{level} - {logger_name}] {log_message}")
-                else: # Si no es JSON o tipo desconocido, mostrar como texto plano
-                    self.log_text.append(f"[STDOUT UNPARSED] {line}")
-            except json.JSONDecodeError:
-                # Si la línea no es un JSON válido, simplemente agrégala al log como texto.
-                self.log_text.append(f"[STDOUT NON-JSON] {line}")
-            except Exception as e:
-                self.log_text.append(f"[ERROR PARSING STDOUT] Exception: {str(e)} - Original line: {line}")
-
-
-    def _on_process_stderr(self):
-        # Leer todo lo disponible en stderr para no perder mensajes
-        error_data = self.process.readAllStandardError().data().decode().strip()
-        if error_data:
-            for line in error_data.splitlines():
-                line = line.strip()
-                if line:
-                    self.log_text.append(f"[STDERR FROM PROCESS] {line}")
-
-    def _on_process_finished(self):
-        exit_code = self.process.exitCode()
-        exit_status = self.process.exitStatus() # NormalExit o CrashExit
-
-        self.log_text.append(f"[INFO] Process finished. Exit Code: {exit_code}, Exit Status: {exit_status.name}")
-        
-        if exit_status == QProcess.ExitStatus.CrashExit:
-            self.log_text.append("[ERROR] The process crashed.")
-            QMessageBox.warning(self, "Process Crashed", "The processing script crashed unexpectedly.")
-        elif exit_code != 0:
-             self.log_text.append(f"[WARNING] Process finished with non-zero exit code: {exit_code}.")
-             # No mostrar QMessageBox aquí si ya se mostró uno por un error JSON
-        
-        self.pipeline_tab.run_btn.setEnabled(True)
-        self.pipeline_tab.stop_btn.setEnabled(False)
-        # Limpieza segura de archivos temporales
-        temp_file_to_delete = getattr(self, '_last_temp_config_path', None)
-        if temp_file_to_delete and isinstance(temp_file_to_delete, str):
-            try:
-                if os.path.exists(temp_file_to_delete):
-                    os.remove(temp_file_to_delete)
-                    self.log_text.append(f"[INFO] Deleted temporary config file: {temp_file_to_delete}")
-            except Exception as e:
-                self.log_text.append(f"[WARNING] Could not delete temporary config file {temp_file_to_delete}: {e}")
-        self._last_temp_config_path = None
-        self.process = None
-
-    def _on_stop_clicked(self):
-        reply = QMessageBox.question(
-            self,
-            "Confirm Stop",
-            "Are you sure you want to stop the process and all its children?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        if self.process is not None and self.process.state() != QProcess.ProcessState.NotRunning:
-            self.log_text.append("[INFO] Stopping process and all children...")
-            try:
-                import psutil
-                pid = self.process.processId()
-                if pid:
-                    parent = psutil.Process(pid)
-                    children = parent.children(recursive=True)
-                    for child in children:
-                        try:
-                            child.terminate()
-                        except Exception:
-                            pass
-                    gone, alive = psutil.wait_procs(children, timeout=3)
-                    for child in alive:
-                        try:
-                            child.kill()
-                        except Exception:
-                            pass
-                    parent.terminate()
-                    try:
-                        parent.wait(timeout=3)
-                    except Exception:
-                        parent.kill()
+                    error_msg = msg.get('message', 'An unknown error occurred.')
+                    traceback_info = "\n".join(msg.get('traceback_lines', []))
+                    full_error = f"{error_msg}\n\nTraceback:\n{traceback_info}"
+                    self.log_text.append(f"[ERROR] {full_error}")
+                    QMessageBox.critical(self, "Pipeline Error", full_error)
                 else:
-                    self.process.kill()
-            except ImportError:
-                self.log_text.append("[WARNING] psutil not installed, using QProcess.kill(). For more robust termination, install psutil.")
-                self.process.kill()
-            except Exception as e:
-                self.log_text.append(f"[ERROR] Failed to stop all processes robustly: {str(e)}. Using QProcess.kill().")
-                self.process.kill()
-            self.process.waitForFinished(3000)
-            self.pipeline_tab.run_btn.setEnabled(True)
-            self.pipeline_tab.stop_btn.setEnabled(False)
-        else:
-            self.log_text.append("[WARNING] No process is running.")
+                    self.log_text.append(f"[PROCESS] {line}")
+            except json.JSONDecodeError:
+                self.log_text.append(f"[PROCESS] {line}")
 
-    def _sync_tabs_to_attrs(self) -> None:
-        """
-        Sincroniza los valores de los widgets de los tabs con los atributos internos de la clase.
-        """
-        # Pipeline tab
-        self.input_path = self.pipeline_tab.input_line.text()
-        self.output_dir = self.pipeline_tab.output_line.text()
-        self.style = self.pipeline_tab.style_combo.currentText()
-        self.intensity = self.pipeline_tab.intensity_spin.value()
-        self.min_parcels = self.pipeline_tab.min_parcels_spin.value()
-        self.max_parcels = self.pipeline_tab.max_parcels_spin.value()
-        self.min_area = self.pipeline_tab.min_area_spin.value()
-        self.buffer_distance = self.pipeline_tab.buffer_spin.value()
-        self.min_distance = self.pipeline_tab.min_distance_spin.value()
-        # PO tab
-        # self.po_path = self.po_tab.po_path_line.text()
-        # self.po_layer = self.po_tab.po_layer_combo.currentText()
-        # self.po_fields = [f.strip() for f in self.po_tab.po_fields_label.text().split(",") if f.strip()]
-        # Exclusion tab
-        # self.exclusion_list = [self.exclusion_tab.excl_list_widget.item(i).text() for i in range(self.exclusion_tab.excl_list_widget.count())]
-    
-    def _get_pipeline_params(self): # Aproximadamente línea 525 en el archivo que subiste
-        self._sync_tabs_to_attrs() # <-- MANTENER esta llamada aquí
-        input_path = self.input_path.strip()
-        output_dir = self.output_dir.strip()
-        style = self.style
-        
-        cfg_overrides = {}
-        if style == "custom":
-            cfg_overrides = {
-                "INTENSITY": self.intensity,
-                "MIN_PARCELS": self.min_parcels,
-                "MAX_PARCELS": self.max_parcels,
-                "MIN_AREA": self.min_area,
-                "BUFFER_DISTANCE": self.buffer_distance,
-                "MIN_DISTANCE": self.min_distance
-            }
-            
-        # Asegúrate de que self.po_path, self.po_layer y self.po_fields estén actualizados.
-        # _sync_tabs_to_attrs en tu versión actual no los actualiza directamente desde la GUI,
-        # lo cual es correcto si se actualizan en sus propios manejadores de eventos.
-        po_config = {
-            "ruta": self.po_path, 
-            "capa": self.po_layer,
-            "campos": self.po_fields
-        } if self.po_path and self.po_layer else None # Considera si un PO sin capa o campos es válido
-        
-        if po_config:
-            cfg_overrides["PO_CONFIG"] = po_config
-            
-        if self.exclusion_list: # self.exclusion_list se actualiza en _add_exclusion/_remove_exclusion
-            cfg_overrides["CAPAS_EXCLUSION"] = self.exclusion_list
-            
-        params = {
-            "input_path": input_path,
-            "output_dir": output_dir,
-            "entrega": None, # Asumo que esto se gestiona en otro lugar o es None intencionadamente
-            "style": style,
-            "cfg_overrides": cfg_overrides
-        }
-        return params
-    
-    def _sync_attrs_to_tabs(self) -> None: #
-        """
-        Sincroniza los atributos internos de la clase con los widgets de los tabs.
-        Si alguna ruta no existe, muestra un mensaje en el widget correspondiente.
-        """
-        # Pipeline tab
-        self.pipeline_tab.input_line.setText(getattr(self, "input_path", ""))
-        self.pipeline_tab.output_line.setText(getattr(self, "output_dir", ""))
-        idx_style = self.pipeline_tab.style_combo.findText(getattr(self, "style", "calibration"), Qt.MatchFlag.MatchFixedString)
-        if idx_style >= 0:
-            self.pipeline_tab.style_combo.setCurrentIndex(idx_style)
-        
-        # Custom parameters specific to PipelineTab's direct widgets
-        self.pipeline_tab.intensity_spin.setValue(getattr(self, "intensity", 50))
-        self.pipeline_tab.min_parcels_spin.setValue(getattr(self, "min_parcels", 1))
-        self.pipeline_tab.max_parcels_spin.setValue(getattr(self, "max_parcels", 10))
-        self.pipeline_tab.min_area_spin.setValue(getattr(self, "min_area", 0.3))
-        self.pipeline_tab.buffer_spin.setValue(getattr(self, "buffer_distance", -20))
-        self.pipeline_tab.min_distance_spin.setValue(getattr(self, "min_distance", 60.0))
+    def _on_process_stderr(self) -> None:
+        # ... (sin cambios)
+        error_data = self.process.readAllStandardError().data().decode("utf-8", errors="replace").strip()
+        if error_data:
+            self.log_text.append(f"[STDERR] {error_data}")
 
-        # PO tab
-        po_path = getattr(self, "po_path", "") #
-        po_layer_from_config = getattr(self, "po_layer", "")  #
-        po_fields_from_config = getattr(self, "po_fields", []) #
-        
-        # self.log_text.append(f"[DEBUG SYNC_ATTRS_PO] Path: {po_path}, Layer: {po_layer_from_config}, Fields: {po_fields_from_config}")
-
-        if po_path and not os.path.exists(po_path): #
-            self.po_tab.po_path_line.setText(f"{po_path} [NOT FOUND - Check path or permissions]") #
-            self.po_tab.po_layer_combo.clear() #
-            self.po_tab.po_layer_combo.addItem("INVALID PATH") #
-            self.po_tab.po_fields_label.setText(", ".join(po_fields_from_config)) #
-        elif po_path: #
-            self.po_tab.po_path_line.setText(po_path) #
+    def _on_process_finished(self) -> None:
+        # ... (sin cambios)
+        exit_code = self.process.exitCode()
+        exit_status = self.process.exitStatus()
+        self.log_text.append(f"[INFO] Process finished. Exit code: {exit_code}, Status: {exit_status.name}")
+        self.pipeline_tab.set_running_state(is_running=False)
+        self.process = None
+        if self._last_temp_config_path and os.path.exists(self._last_temp_config_path):
             try:
-                layers = list_layers(po_path) #
-                
-                # --- DESCONECTAR SEÑAL ---
-                signal_disconnected_successfully = False
-                try:
-                    # Basado en tu _init_ui, la señal está conectada a _on_po_layer_changed
-                    self.po_tab.po_layer_combo.currentTextChanged.disconnect(self._on_po_layer_changed) #
-                    signal_disconnected_successfully = True
-                    # self.log_text.append("[DEBUG SYNC_ATTRS_PO] Disconnected _on_po_layer_changed from po_layer_combo")
-                except TypeError: 
-                    # self.log_text.append("[DEBUG SYNC_ATTRS_PO] po_layer_combo.currentTextChanged(self._on_po_layer_changed) was not connected or already disconnected.")
-                    pass 
+                os.remove(self._last_temp_config_path)
+                self.log_text.append(f"[INFO] Removed temporary config: {self._last_temp_config_path}")
+                self._last_temp_config_path = None
+            except Exception as e:
+                self.log_text.append(f"[WARNING] Could not remove temp file: {e}")
 
-                self.po_tab.po_layer_combo.clear() #
-                self.po_tab.po_layer_combo.addItems(layers) #
-                
-                idx_layer = self.po_tab.po_layer_combo.findText(po_layer_from_config) #
-                if idx_layer >= 0: #
-                    self.po_tab.po_layer_combo.setCurrentIndex(idx_layer) #
-                elif po_layer_from_config: #
-                    self.po_tab.po_layer_combo.addItem(f"{po_layer_from_config} [NOT FOUND]") #
-                    self.po_tab.po_layer_combo.setCurrentText(f"{po_layer_from_config} [NOT FOUND]") #
-                elif layers: #
-                     self.po_tab.po_layer_combo.setCurrentIndex(0) #
+    # --- SETTINGS & CONFIG MANAGEMENT ---
 
-                # --- RECONECTAR SEÑAL ---
-                if signal_disconnected_successfully:
-                    self.po_tab.po_layer_combo.currentTextChanged.connect(self._on_po_layer_changed) #
-                    # self.log_text.append("[DEBUG SYNC_ATTRS_PO] Reconnected _on_po_layer_changed to po_layer_combo")
-
-            except Exception as e: #
-                self.log_text.append(f"[ERROR _sync_attrs_to_tabs] Error updating PO layer combo: {str(e)}") #
-                self.po_tab.po_layer_combo.clear() #
-                self.po_tab.po_layer_combo.addItem("ERROR LISTING LAYERS") #
-            
-            self.po_tab.po_fields_label.setText(", ".join(po_fields_from_config)) #
-        else: # No po_path
-            self.po_tab.po_path_line.setText("") #
-            self.po_tab.po_layer_combo.clear() #
-            self.po_tab.po_fields_label.setText("") #
-            
-        # Exclusion tab
-        self._update_exclusion_list() # Llama al método que ya actualiza la lista de exclusiones
-
-        # ConfigTab - Log Level
-        idx_log = self.config_tab.findChild(QComboBox, "log_level_combo").findText(self._current_log_level)
-        if idx_log >=0:
-            self.config_tab.findChild(QComboBox, "log_level_combo").setCurrentIndex(idx_log)
-
-
-    def _sync_tabs_to_attrs(self) -> None: #
-        """
-        Sincroniza los valores de los widgets de los tabs con los atributos internos de la clase.
-        """
-        # Pipeline tab
-        self.input_path = self.pipeline_tab.input_line.text()
-        self.output_dir = self.pipeline_tab.output_line.text()
-        self.style = self.pipeline_tab.style_combo.currentText()
+    def _get_full_pipeline_config(self) -> Dict[str, Any]:
+        """Assembles the complete pipeline configuration from all UI tabs."""
+        base_config = self.pipeline_tab.get_config()
         
-        # Custom params from PipelineTab direct widgets
-        self.intensity = self.pipeline_tab.intensity_spin.value()
-        self.min_parcels = self.pipeline_tab.min_parcels_spin.value()
-        self.max_parcels = self.pipeline_tab.max_parcels_spin.value()
-        self.min_area = self.pipeline_tab.min_area_spin.value()
-        self.buffer_distance = self.pipeline_tab.buffer_spin.value()
-        self.min_distance = self.pipeline_tab.min_distance_spin.value()
-
-        # PO tab
-        self.po_path = self.po_tab.po_path_line.text()
-        current_po_layer_text = self.po_tab.po_layer_combo.currentText()
-        if "[NOT FOUND" in current_po_layer_text or "[ERROR" in current_po_layer_text or "[FILE PATH NOT SET]" in current_po_layer_text :
-            # If the combo box shows an error or placeholder,
-            # try to use the internally stored self.po_layer if it seems more valid,
-            # or set to an empty string to indicate no valid layer is selected.
-            # This depends on how you want to handle "last known good" vs. "current display".
-            # For saving, it's often better to save what's actually internally consistent.
-            # For now, let's assume if display is bad, internal might be better if it exists.
-             if hasattr(self, 'po_layer') and self.po_layer and not ("[NOT FOUND" in self.po_layer or "[ERROR" in self.po_layer or "[FILE PATH NOT SET]" in self.po_layer):
-                 self.po_layer = self.po_layer
-             else:
-                 self.po_layer = "" # Or None, depending on how your backend handles it
-        else:
-            self.po_layer = current_po_layer_text
-        # self.po_fields se actualiza directamente en _select_po_fields y _restore_gui_settings
-
-        # Exclusion list (self.exclusion_list) se actualiza en _add_exclusion y _remove_exclusion
-
-
-    def _set_pipeline_params(self, params):
-        # Carga los valores del dict de pipeline en los atributos y los tabs
-        self.input_path = params.get("input_path", "")
-        self.output_dir = params.get("output_dir", "")
-        self.style = params.get("style", "calibration")
-        cfg_overrides = params.get("cfg_overrides", {})
-        if self.style == "custom":
-            self.intensity = cfg_overrides.get("INTENSITY", 50)
-            self.min_parcels = cfg_overrides.get("MIN_PARCELS", 1)
-            self.max_parcels = cfg_overrides.get("MAX_PARCELS", 10)
-            self.min_area = cfg_overrides.get("MIN_AREA", 0.3)
-            self.buffer_distance = cfg_overrides.get("BUFFER_DISTANCE", -20)
-            self.min_distance = cfg_overrides.get("MIN_DISTANCE", 60.0)
-        po_conf = cfg_overrides.get("PO_CONFIG", {})
-        self.po_path = po_conf.get("ruta", "")
-        self.po_layer = po_conf.get("capa", "")
-        self.po_fields = po_conf.get("campos", [])
-        self.exclusion_list = cfg_overrides.get("CAPAS_EXCLUSION", [])
-        # Log temporal para depuración
-        self.log_text.append(f"[DEBUG] PO path: {self.po_path}")
-        self.log_text.append(f"[DEBUG] PO layer: {self.po_layer}")
-        self.log_text.append(f"[DEBUG] PO fields: {self.po_fields}")
-        self._sync_attrs_to_tabs()
-
-    def _save_gui_settings(self) -> None: #
-        self._sync_tabs_to_attrs() # Ensure attributes are up-to-date from GUI
-        settings = {
-            "input_path": self.input_path, #
-            "output_dir": self.output_dir, #
-            "style": self.style, #
-            "custom_params": { #
-                "intensity": self.intensity, #
-                "min_parcels": self.min_parcels, #
-                "max_parcels": self.max_parcels, #
-                "min_area": self.min_area, #
-                "buffer_distance": self.buffer_distance, #
-                "min_distance": self.min_distance #
-            },
-            "po_config": { #
-                "path": self.po_path, #
-                "layer": self.po_layer, #
-                "fields": self.po_fields #
-            },
-            "exclusion_list": self.exclusion_list, #
-            "intensity_by_field": self.settings.get("intensity_by_field", {}), # Mantener de settings previos
-            "log_level": self._current_log_level # Guardar el nivel de log
+        full_config = {
+            "input_path": base_config.get("input_path"),
+            "output_dir": base_config.get("output_dir"),
+            "style": base_config.get("style"),
+            "entrega": None,
+            "cfg_overrides": base_config.get("cfg_overrides", {})
         }
-        save_gui_settings(settings) #
-        self.log_text.append("[INFO] Settings saved.")
-        # self.config_tab.configChanged.emit(settings) # Emitir solo si ConfigTab lo necesita para algo más
 
+        # [CORRECCIÓN] Usar la configuración centralizada que se actualiza con las señales.
+        if self.pipeline_config.get("PO_CONFIG"):
+            full_config["cfg_overrides"]["PO_CONFIG"] = self.pipeline_config.get("PO_CONFIG")
+        if self.pipeline_config.get("CAPAS_EXCLUSION"):
+            full_config["cfg_overrides"]["CAPAS_EXCLUSION"] = self.pipeline_config.get("CAPAS_EXCLUSION")
+
+        return full_config
+
+    def _export_config(self) -> None:
+        # ... (sin cambios)
+        config_to_export = self._get_full_pipeline_config()
+        file_path, _ = QFileDialog.getSaveFileName(self, "Export Pipeline Config", "", "JSON Files (*.json);;All Files (*)")
+        if not file_path:
+            self.log_text.append("[INFO] Export cancelled by user.")
+            return
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(config_to_export, f, indent=4, ensure_ascii=False)
+            self.log_text.append(f"[SUCCESS] Configuration successfully exported to: {file_path}")
+            QMessageBox.information(self, "Export Successful", f"Configuration saved to:\n{file_path}")
+        except Exception as e:
+            self.log_text.append(f"[ERROR] Failed to export configuration: {str(e)}")
+            QMessageBox.critical(self, "Export Error", f"Could not save the configuration file.\n\nError: {e}")
+
+    def _import_config(self) -> None:
+        # ... (sin cambios)
+        file_path, _ = QFileDialog.getOpenFileName(self, "Import Pipeline Config", "", "JSON Files (*.json);;All Files (*)")
+        if not file_path:
+            self.log_text.append("[INFO] Import cancelled by user.")
+            return
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            if "input_path" not in config or "style" not in config:
+                raise KeyError("Imported file is missing required keys ('input_path', 'style').")
+            cfg_overrides = config.get("cfg_overrides", {})
+            custom_params = {
+                "intensity": cfg_overrides.get("INTENSIDAD"), "min_parcels": cfg_overrides.get("MIN_PARCELAS"),
+                "max_parcels": cfg_overrides.get("MAX_PARCELAS"), "min_area": cfg_overrides.get("AREA_MINIMA_HA"),
+                "buffer_distance": cfg_overrides.get("BUFFER_DISTANCE"), "min_distance": cfg_overrides.get("MIN_DISTANCE")}
+            pipeline_config = {"input_path": config.get("input_path"), "output_dir": config.get("output_dir"), "style": config.get("style"), "custom_params": custom_params}
+            po_config = cfg_overrides.get("PO_CONFIG", {})
+            exclusion_config = cfg_overrides.get("CAPAS_EXCLUSION", [])
+            self.pipeline_tab.set_config(pipeline_config)
+            self.po_tab.set_config(po_config)
+            self.exclusion_tab.set_config(exclusion_config)
+            self.log_text.append(f"[SUCCESS] Configuration successfully imported from: {file_path}")
+            QMessageBox.information(self, "Import Successful", f"Configuration loaded from:\n{file_path}")
+        except (json.JSONDecodeError, KeyError, Exception) as e:
+            error_message = f"Failed to import configuration from {os.path.basename(file_path)}."
+            self.log_text.append(f"[ERROR] {error_message}\nDetails: {e}")
+            QMessageBox.critical(self, "Import Error", f"{error_message}\n\nPlease check the file format.\n\nError: {e}")
+
+    def _save_gui_settings(self) -> None:
+        # ... (sin cambios)
+        pipeline_settings = self.pipeline_tab.get_config()
+        custom_params = {"intensity": self.pipeline_tab.intensity_spin.value(), "min_parcels": self.pipeline_tab.min_parcels_spin.value(), "max_parcels": self.pipeline_tab.max_parcels_spin.value(), "min_area": self.pipeline_tab.min_area_spin.value(), "buffer_distance": self.pipeline_tab.buffer_spin.value(), "min_distance": self.pipeline_tab.min_distance_spin.value()}
+        full_settings = {"input_path": pipeline_settings.get("input_path"), "output_dir": pipeline_settings.get("output_dir"), "style": pipeline_settings.get("style"), "custom_params": custom_params, "po_config": self.po_tab.get_config(), "exclusion_list": self.exclusion_tab.get_config()}
+        save_gui_settings(full_settings)
+        self.log_text.append("[INFO] GUI settings saved successfully.")
 
     def _restore_gui_settings(self) -> None:
-        settings = load_gui_settings() #
-        self.input_path = settings.get("input_path", "") #
-        self.output_dir = settings.get("output_dir", "") #
-        self.style = settings.get("style", "calibration") #
-
-        # Custom params for pipeline tab
-        custom_params_pipeline = settings.get("custom_params", {}) #
-        self.intensity = custom_params_pipeline.get("intensity", 50) #
-        self.min_parcels = custom_params_pipeline.get("min_parcels", 1) #
-        self.max_parcels = custom_params_pipeline.get("max_parcels", 10) #
-        self.min_area = custom_params_pipeline.get("min_area", 0.3) #
-        self.buffer_distance = custom_params_pipeline.get("buffer_distance", -20) #
-        self.min_distance = custom_params_pipeline.get("min_distance", 60.0) #
-
-        # PO Config
-        po_conf = settings.get("po_config", {}) #
-        self.po_path = po_conf.get("path", "") #
-        self.po_layer = po_conf.get("layer", "") #
-        self.po_fields = po_conf.get("fields", []) #
-
-        # Exclusion List
-        self.exclusion_list = settings.get("exclusion_list", []) #
+        settings = load_gui_settings()
         
-        self.settings = settings # Store the loaded settings
-        self._sync_attrs_to_tabs() # Update all GUI elements from these attributes
-        self.log_text.append("[INFO] Settings loaded.")
-        self.config_tab.configChanged.emit(settings)
+        pipeline_config = {"input_path": settings.get("input_path"), "output_dir": settings.get("output_dir"), "style": settings.get("style"), "custom_params": settings.get("custom_params")}
+        po_config = settings.get("po_config", {})
+        exclusion_config = settings.get("exclusion_list", [])
 
-    def _on_any_field_changed(self): # Aproximadamente línea 621 en el archivo que subiste
-        # Las líneas de depuración que te sugerí antes:
-        print(f"[DEBUG] In _on_any_field_changed. Type of self: {type(self)}")
-        print(f"[DEBUG] Does self have _get_pipeline_params? {hasattr(self, '_get_pipeline_params')}")
-        if hasattr(self, '_get_pipeline_params'):
-            print(f"[DEBUG] _get_pipeline_params attribute: {getattr(self, '_get_pipeline_params')}")
-
-        self._last_gui_hash = self._hash_dict(self._get_pipeline_params())
-
-    def _on_log_level_changed(self, level):
-        self._current_log_level = level
-        self.log_text.append(f"[INFO] Log level set to: {level}")
-
-    def _export_pipeline_config(self):
-        params = self._get_pipeline_params()
-        file_path, _ = QFileDialog.getSaveFileName(self, "Export Pipeline Config", "", "JSON Files (*.json)")
-        if file_path:
-            try:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(params, f, indent=4)
-                self.log_text.append(f"[INFO] Pipeline config exported to: {file_path}")
-            except Exception as e:
-                self.log_text.append(f"[ERROR] Failed to export config: {str(e)}")
-
-    def _import_pipeline_config(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Import Pipeline Config", "", "JSON Files (*.json)")
-        if file_path:
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    params = json.load(f)
-                self._set_pipeline_params(params)
-                self._imported_config_path = file_path
-                self._imported_config_hash = self._hash_dict(params)
-                self._last_gui_hash = self._hash_dict(self._get_pipeline_params())
-                self.log_text.append(f"[INFO] Pipeline config imported from: {file_path}")
-                self.log_text.append(f"[INFO] Ready to run with imported config: {file_path}")
-            except Exception as e:
-                self.log_text.append(f"[ERROR] Failed to import config: {str(e)}")
-
-    def _hash_dict(self, d):
-        import hashlib
-        return hashlib.sha256(json.dumps(d, sort_keys=True).encode("utf-8")).hexdigest()
-
-    def _on_config_changed(self, config: dict) -> None:
-        """
-        Callback que se ejecuta cuando la configuración cambia en ConfigTab.
-        Refresca los tabs relevantes (por ejemplo, POTab).
-        """
-        if hasattr(self.po_tab, "refresh_from_config"):
-            self.po_tab.refresh_from_config(config.get("po_config", {}))
+        self.pipeline_tab.set_config(pipeline_config)
+        self.po_tab.set_config(po_config)
+        self.exclusion_tab.set_config(exclusion_config)
+        
+        # [CORRECCIÓN] Después de cargar, actualizar el estado central.
+        self._on_po_config_changed(self.po_tab.get_config())
+        self._on_exclusions_changed(self.exclusion_tab.get_config())
+        
+        self.log_text.append("[INFO] GUI settings loaded successfully.")
+        
+    def closeEvent(self, event) -> None:
+        # ... (sin cambios)
+        if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
+            reply = QMessageBox.question(self, 'Process Still Running', "A pipeline process is still running. Are you sure you want to close? The process will be terminated.", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                self._stop_pipeline()
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.accept()
