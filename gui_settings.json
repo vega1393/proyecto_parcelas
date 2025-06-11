@@ -1,14 +1,15 @@
 {
     "input_path": "C:/TRABAJO/06_proyectos/07_fasa2025/01_metricas/gpkg_e16_20250407_gridcode_metricas.gpkg",
-    "output_dir": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test01",
+    "output_dir": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test02",
     "style": "calibration",
+    "use_csv": true,
+    "csv_path": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test02/01_resumen_parcelas_por_grupo.csv",
+    "grouping_fields": [
+        "TIPOUSO",
+        "grid_code"
+    ],
     "custom_params": {
-        "intensity": 50,
-        "min_parcels": 1,
-        "max_parcels": 10,
-        "min_area": 0.3,
-        "buffer_distance": -20,
-        "min_distance": 60.0
+        "intensity": 100
     },
     "po_config": {
         "ruta": "C:/TRABAJO/06_proyectos/07_fasa2025/04_po_operativo/uso_suelo_from_arauco/uso_suelo_202412.gpkg",
@@ -19,7 +20,11 @@
             "tipo_uso",
             "apl",
             "mpl"
-        ]
+        ],
+        "campos_id_fasa": {
+            "predio": "idpredio",
+            "tipo": "tipo_uso"
+        }
     },
     "exclusion_list": [
         {
@@ -32,5 +37,85 @@
             "capa": "predios",
             "descripcion": "predios_rojos.gpkg"
         }
+    ],
+    "gridcode_config": {
+        "enabled": true,
+        "gridcode_params": {
+            "field1": {
+                "field": "cov",
+                "bins": [
+                    {
+                        "max": 50.0,
+                        "id": 1
+                    },
+                    {
+                        "min": 50.0,
+                        "max": 70.0,
+                        "id": 2
+                    },
+                    {
+                        "min": 70.0,
+                        "id": 3
+                    }
+                ]
+            },
+            "field2": {
+                "field": "p95",
+                "bins": [
+                    {
+                        "max": 12.0,
+                        "id": 1
+                    },
+                    {
+                        "min": 12.0,
+                        "max": 16.0,
+                        "id": 2
+                    },
+                    {
+                        "min": 16.0,
+                        "max": 20.0,
+                        "id": 3
+                    },
+                    {
+                        "min": 20.0,
+                        "max": 24.0,
+                        "id": 4
+                    },
+                    {
+                        "min": 24.0,
+                        "id": 5
+                    }
+                ]
+            }
+        }
+    },
+    "delivery_config": {
+        "delivery_code": "d01",
+        "date_today": "20250611",
+        "date_formatted": "2025-06-11",
+        "base_prefix": "",
+        "custom_suffix": "",
+        "subdirectories": {
+            "results": "results",
+            "logs": "logs",
+            "summary": "summary"
+        },
+        "metadata": {
+            "description": "",
+            "version": "",
+            "operator": "",
+            "timestamp": "2025-06-11T15:58:33.814770"
+        }
+    },
+    "count_column_csv": "n_parcelas",
+    "field_mappings": [
+        [
+            "tipouso",
+            "tipouso"
+        ],
+        [
+            "grid_code",
+            "grid_code"
+        ]
     ]
 }
