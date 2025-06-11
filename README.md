@@ -23,7 +23,7 @@ La aplicación implementa un pipeline de procesamiento geoespacial modular y con
 
 El proyecto está organizado de la siguiente manera:
 
-```
+```text
 proyecto_parcelas/
 ├── gui_settings.json         # Guarda la configuración de la GUI entre sesiones
 ├── main.py                   # Punto de entrada de la aplicación, lanza la GUI
@@ -72,75 +72,53 @@ proyecto_parcelas/
         └── __init__.py
 ```
 
-3.1. Descripción de Scripts y Módulos
-Raíz del Proyecto
-main.py
-Punto de entrada principal de la aplicación.
-Lanza la interfaz gráfica de usuario (GUI) de PyQt6, inicializando la ventana principal y gestionando el ciclo de vida de la aplicación.
-gui_settings.json
-Archivo de configuración persistente de la GUI.
-Guarda el estado de la interfaz (últimos archivos usados, parámetros, etc.) entre sesiones.
-requirements.txt
-Lista de dependencias de Python necesarias para ejecutar el proyecto.
-src/
-src/config/
-config_base.py
-Define la estructura base de la configuración del pipeline usando dataclasses.
-Especifica todos los parámetros posibles que pueden ser usados en el pipeline.
-estilos.py
-Contiene configuraciones predefinidas para distintos estilos de generación de parcelas (Calibración, Control, Custom).
-Cada estilo es una instancia de la configuración base con valores adaptados a un caso de uso.
-src/core/
-pipeline.py
-Orquestador principal del flujo de procesamiento geoespacial.
-Implementa la función run_parcel_generation_pipeline, que ejecuta secuencialmente todos los pasos del pipeline: lectura de datos, aplicación de filtros, exclusiones, generación de parcelas, análisis de pérdidas, etc.
-src/io/
-lectura.py
-Funciones para leer capas geoespaciales desde archivos.
-Incluye utilidades para cargar datos vectoriales y validar su estructura.
-rutas.py
-Gestión de rutas de archivos y directorios del proyecto.
-Centraliza la lógica para construir rutas de entrada/salida y nombres de archivos.
-src/json_config/
-test_calibration.json, test_control.json, test_custom.json
-Ejemplos de archivos de configuración JSON para distintos estilos de pipeline.
-Útiles para pruebas y como referencia de la estructura esperada.
-src/pipeline/
-analisis.py
-Módulo para el análisis de pérdidas de parcelas.
-Compara el número de parcelas teóricas y reales, generando reportes de eficiencia.
-atributos_po.py
-Asigna atributos del Plan Operativo a las parcelas generadas mediante uniones espaciales.
-calculo_parcelas.py
-Calcula la cantidad de parcelas a generar en cada rodal o área de interés.
-exclusiones.py
-Aplica exclusiones geométricas (e.g., caminos, ríos) a las áreas de interés antes de la generación de parcelas.
-filtros.py
-Aplica filtros iniciales a los datos de entrada, como área mínima o valores específicos de atributos.
-generacion_parcelas.py
-Genera las geometrías de las parcelas (puntos o polígonos) dentro de los rodales o áreas de interés.
-src/ui/
-app.py
-Ventana principal de la aplicación y lógica de la GUI.
-Gestiona la interacción entre las pestañas, la configuración, la ejecución del pipeline y el registro de logs.
-tab/
-Contiene los widgets de cada pestaña de la GUI:
-pipeline_tab.py: Pestaña principal para configurar y ejecutar el pipeline.
-po_tab.py: Pestaña para seleccionar el archivo y campos del Plan Operativo.
-exclusion_tab.py: Pestaña para gestionar capas de exclusión.
-config_tab.py: Pestaña para ajustes avanzados y gestión de configuraciones.
-src/utils/
-geo_utils.py
-Utilidades para operaciones geoespaciales generales, como manejo de CRS y reparación de geometrías.
-gpkg_helpers.py
-Funciones auxiliares para trabajar con archivos GeoPackage y FileGDB: listar capas y campos.
-logging_utils.py
-Configuración y utilidades para el sistema de logging del proyecto.
-settings.py
-Carga y guardado de la configuración de la GUI en gui_settings.json.
-src/run_pipeline.py
-_Script ejecutable para correr el pipeline de generación de parcelas._
-Recibe como argumento un archivo de configuración JSON, inicializa el pipeline y ejecuta todos los pasos definidos en src/core/pipeline.py. Es el punto de entrada cuando el pipeline se ejecuta desde la GUI o desde la línea de comandos.
+### 3.1. Descripción de Scripts y Módulos
+
+#### Raíz del Proyecto
+
+* **`main.py`**
+    * Punto de entrada principal de la aplicación.
+    * Lanza la interfaz gráfica de usuario (GUI) de PyQt6, inicializando la ventana principal y gestionando el ciclo de vida de la aplicación.
+* **`gui_settings.json`**
+    * Archivo de configuración persistente de la GUI.
+    * Guarda el estado de la interfaz (últimos archivos usados, parámetros, etc.) entre sesiones.
+* **`requirements.txt`**
+    * Lista de dependencias de Python necesarias para ejecutar el proyecto.
+
+#### `src/`
+
+* **`src/config/`**
+    * **`config_base.py`**: Define la estructura base de la configuración del pipeline usando `dataclasses`. Especifica todos los parámetros posibles que pueden ser usados en el pipeline.
+    * **`estilos.py`**: Contiene configuraciones predefinidas para distintos estilos de generación de parcelas (Calibración, Control, Custom). Cada estilo es una instancia de la configuración base con valores adaptados a un caso de uso.
+* **`src/core/`**
+    * **`pipeline.py`**: Orquestador principal del flujo de procesamiento geoespacial. Implementa la función `run_parcel_generation_pipeline`, que ejecuta secuencialmente todos los pasos del pipeline: lectura de datos, aplicación de filtros, exclusiones, generación de parcelas, análisis de pérdidas, etc.
+* **`src/io/`**
+    * **`lectura.py`**: Funciones para leer capas geoespaciales desde archivos. Incluye utilidades para cargar datos vectoriales y validar su estructura.
+    * **`rutas.py`**: Gestión de rutas de archivos y directorios del proyecto. Centraliza la lógica para construir rutas de entrada/salida y nombres de archivos.
+* **`src/json_config/`**
+    * **`test_calibration.json`**, **`test_control.json`**, **`test_custom.json`**: Ejemplos de archivos de configuración JSON para distintos estilos de pipeline. Útiles para pruebas y como referencia de la estructura esperada.
+* **`src/pipeline/`**
+    * **`analisis.py`**: Módulo para el análisis de pérdidas de parcelas. Compara el número de parcelas teóricas y reales, generando reportes de eficiencia.
+    * **`atributos_po.py`**: Asigna atributos del Plan Operativo a las parcelas generadas mediante uniones espaciales.
+    * **`calculo_parcelas.py`**: Calcula la cantidad de parcelas a generar en cada rodal o área de interés.
+    * **`exclusiones.py`**: Aplica exclusiones geométricas (e.g., caminos, ríos) a las áreas de interés antes de la generación de parcelas.
+    * **`filtros.py`**: Aplica filtros iniciales a los datos de entrada, como área mínima o valores específicos de atributos.
+    * **`generacion_parcelas.py`**: Genera las geometrías de las parcelas (puntos o polígonos) dentro de los rodales o áreas de interés.
+* **`src/ui/`**
+    * **`app.py`**: Ventana principal de la aplicación y lógica de la GUI. Gestiona la interacción entre las pestañas, la configuración, la ejecución del pipeline y el registro de logs.
+    * **`tab/`**: Contiene los widgets de cada pestaña de la GUI:
+        * `pipeline_tab.py`: Pestaña principal para configurar y ejecutar el pipeline.
+        * `po_tab.py`: Pestaña para seleccionar el archivo y campos del Plan Operativo.
+        * `exclusion_tab.py`: Pestaña para gestionar capas de exclusión.
+        * `config_tab.py`: Pestaña para ajustes avanzados y gestión de configuraciones.
+* **`src/utils/`**
+    * **`geo_utils.py`**: Utilidades para operaciones geoespaciales generales, como manejo de CRS y reparación de geometrías.
+    * **`gpkg_helpers.py`**: Funciones auxiliares para trabajar con archivos GeoPackage y FileGDB: listar capas y campos.
+    * **`logging_utils.py`**: Configuración y utilidades para el sistema de logging del proyecto.
+    * **`settings.py`**: Carga y guardado de la configuración de la GUI en `gui_settings.json`.
+* **`src/run_pipeline.py`**
+    * _Script ejecutable para correr el pipeline de generación de parcelas._
+    * Recibe como argumento un archivo de configuración JSON, inicializa el pipeline y ejecuta todos los pasos definidos en `src/core/pipeline.py`. Es el punto de entrada cuando el pipeline se ejecuta desde la GUI o desde la línea de comandos.
 
 ## 4. Prerrequisitos
 

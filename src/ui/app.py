@@ -763,12 +763,6 @@ class ParcelGeneratorApp(QMainWindow):
         if hasattr(self, '_get_pipeline_params'):
             print(f"[DEBUG] _get_pipeline_params attribute: {getattr(self, '_get_pipeline_params')}")
 
-        # Línea original que causa el error (ajústala al número de línea real en tu archivo ejecutado)
-        # self._sync_tabs_to_attrs() # <-- ELIMINAR ESTA LLAMADA REDUNDANTE
-                                     # Esta es la modificación principal de esta respuesta.
-        
-        # La siguiente línea es donde ocurría el AttributeError si _get_pipeline_params no se encontraba.
-        # Con la corrección de la redundancia, ahora depende de que _get_pipeline_params haga la sincronización.
         self._last_gui_hash = self._hash_dict(self._get_pipeline_params())
 
     def _on_log_level_changed(self, level):

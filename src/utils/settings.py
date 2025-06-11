@@ -6,6 +6,9 @@ All configuration is stored in JSON format.
 import os
 import json
 from typing import Any, Dict
+import logging
+
+logger = logging.getLogger(__name__)
 
 SETTINGS_FILE = os.path.join(os.getcwd(), "gui_settings.json")
 
@@ -43,6 +46,8 @@ def load_gui_settings() -> Dict[str, Any]:
     except Exception:
         return DEFAULT_SETTINGS.copy()
 
+
+
 def save_gui_settings(settings: Dict[str, Any]) -> None:
     """
     Saves GUI settings to a JSON file.
@@ -51,5 +56,5 @@ def save_gui_settings(settings: Dict[str, Any]) -> None:
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(settings, f, indent=4)
     except Exception as e:
-        # In production, log this error
-        pass 
+        logger.error(f"Failed to save GUI settings to {SETTINGS_FILE}: {e}")
+        # Optionally, raise the exception or show a message to the user

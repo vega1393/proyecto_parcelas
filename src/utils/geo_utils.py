@@ -29,8 +29,7 @@ def verificar_y_transformar_crs(
         GeoDataFrame con el CRS correcto
     """
     if gdf.crs is None:
-        logger.warning(f"CRS no definido en {desc}. Asumiendo EPSG:{crs_target}")
-        gdf.set_crs(epsg=crs_target, inplace=True)
+        raise ValueError(f"The layer '{desc}' has no CRS defined. Please define a CRS for the source file.")
     else:
         epsg_actual = gdf.crs.to_epsg() if gdf.crs.to_epsg() else None
         if epsg_actual != crs_target:
