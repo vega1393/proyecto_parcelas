@@ -16,7 +16,6 @@ from src.pipeline.filtros import aplicar_filtros_iniciales, calcular_gridcode
 from src.pipeline.calculo_parcelas import calcular_cantidad_de_parcelas
 from src.pipeline.exclusiones import aplicar_exclusiones
 from src.pipeline.generacion_parcelas import generar_parcelas, generar_poligonos_parcelas
-# [CORRECCIÓN 1] Se elimina la importación de reordenar_columnas, que ya no existe por separado.
 from src.pipeline.atributos_po import asignar_atributos_po
 from src.pipeline.analisis import analizar_perdidas_parcelas
 
@@ -70,14 +69,43 @@ def ejecutar_proceso(
     report_progress(5, "Configurando...")
     resultados = {'rutas': rutas, 'config': cfg}
 
+    # Log información sobre los filtros que se van a aplicar
+    filtros_campos = cfg.get("FILTROS_CAMPOS", {})
+    if filtros_campos:
+        logger.info("=== FILTROS CONFIGURADOS ===")
+        for campo, filtro in filtros_campos.items():
+            if callable(filtro):
+                logger.info(f"Campo '{campo}': Función personalizada")
+            else:
+                logger.info(f"Campo '{campo}': {filtro}")
+        logger.info("=" * 30)
+
     try:
         report_progress(10, "Cargando datos de entrada...")
         gdf = pyogrio.read_dataframe(rutas['input'])
         gdf = gpd.GeoDataFrame(gdf, geometry='geometry')
         gdf = verificar_y_transformar_crs(gdf, "capa inicial", cfg['PROJECTED_CRS'])
         gdf.columns = gdf.columns.str.lower()
+        
         report_progress(15, "Aplicando filtros iniciales...")
-        gdf = aplicar_filtros_iniciales(gdf, cfg["FILTROS_CAMPOS"])
+        try:
+            gdf = aplicar_filtros_iniciales(gdf, cfg["FILTROS_CAMPOS"])
+        except ValueError as e:
+            logger.error(f"Error en filtros iniciales: {str(e)}")
+            logger.error("SUGERENCIAS PARA SOLUCIONAR EL PROBLEMA:")
+            logger.error("1. Verifique que los tipos de uso configurados coincidan con los datos reales")
+            logger.error("2. Use el diálogo 'Load Types from Plan Operativo' para cargar tipos automáticamente")
+            logger.error("3. Revise la configuración de filtros en el tab Pipeline")
+            logger.error("4. Asegúrese de que el Plan Operativo esté correctamente configurado")
+            raise ValueError(f"Error en filtros iniciales: {str(e)}\n\n"
+                           f"SUGERENCIAS:\n"
+                           f"• Verifique que los tipos de uso configurados coincidan con los datos reales\n"
+                           f"• Use el diálogo 'Load Types from Plan Operativo' para cargar tipos automáticamente\n"
+                           f"• Revise la configuración de filtros en el tab Pipeline\n"
+                           f"• Asegúrese de que el Plan Operativo esté correctamente configurado")
+        except Exception as e:
+            logger.error(f"Error inesperado en filtros iniciales: {str(e)}")
+            raise
         
         op = cfg["OPCIONES_ACTIVAS"]
         
@@ -143,13 +171,73 @@ def ejecutar_proceso(
 
         gdf_post_exclusion = gdf_para_generar
         if 3 in op:
-            report_progress(40, "Aplicando exclusiones...")
-            gdf_post_exclusion = aplicar_exclusiones(
-                gdf=gdf_para_generar, capas_exclusion=cfg["CAPAS_EXCLUSION"],
-                fields=grouping_cols, crs_target=cfg["PROJECTED_CRS"],
-                output_gpkg=rutas['gpkg_exclusion']
-            )
-            resultados['gdf_post_exclusion'] = gdf_post_exclusion
+            # Verificar si hay capas de exclusión configuradas
+            capas_exclusion = cfg.get("CAPAS_EXCLUSION", [])
+            
+            if not capas_exclusion or len(capas_exclusion) == 0:
+                logger.info("No hay capas de exclusión configuradas. Saltando paso de exclusiones.")
+                report_progress(40, "Saltando exclusiones (no configuradas)...")
+                gdf_post_exclusion = gdf_para_generar.copy()
+                
+                # Agregar columna de área para consistencia con el flujo normal
+                if 'area_m2' not in gdf_post_exclusion.columns:
+                    gdf_post_exclusion['area_m2'] = gdf_post_exclusion.geometry.area
+                if 'area_ha_post_exclusion' not in gdf_post_exclusion.columns:
+                    gdf_post_exclusion['area_ha_post_exclusion'] = gdf_post_exclusion['area_m2'] / 10000
+                
+                # Guardar archivo para mantener consistencia del pipeline
+                if rutas.get('gpkg_exclusion'):
+                    logger.info(f"Guardando datos sin exclusiones en: {rutas['gpkg_exclusion']}")
+                    pyogrio.write_dataframe(gdf_post_exclusion, rutas['gpkg_exclusion'], layer='areas_post_exclusion')
+                
+                resultados['gdf_post_exclusion'] = gdf_post_exclusion
+            else:
+                # Verificar que las capas tienen rutas válidas
+                capas_validas = [c for c in capas_exclusion if c.get('ruta') and c.get('ruta').strip()]
+                
+                if not capas_validas:
+                    logger.info("Las capas de exclusión configuradas no tienen rutas válidas. Saltando paso.")
+                    report_progress(40, "Saltando exclusiones (rutas inválidas)...")
+                    gdf_post_exclusion = gdf_para_generar.copy()
+                    
+                    # Agregar columna de área para consistencia
+                    if 'area_m2' not in gdf_post_exclusion.columns:
+                        gdf_post_exclusion['area_m2'] = gdf_post_exclusion.geometry.area
+                    if 'area_ha_post_exclusion' not in gdf_post_exclusion.columns:
+                        gdf_post_exclusion['area_ha_post_exclusion'] = gdf_post_exclusion['area_m2'] / 10000
+                    
+                    # Guardar archivo para mantener consistencia
+                    if rutas.get('gpkg_exclusion'):
+                        pyogrio.write_dataframe(gdf_post_exclusion, rutas['gpkg_exclusion'], layer='areas_post_exclusion')
+                    
+                    resultados['gdf_post_exclusion'] = gdf_post_exclusion
+                else:
+                    logger.info(f"Aplicando {len(capas_validas)} capas de exclusión válidas...")
+                    report_progress(40, "Aplicando exclusiones...")
+                    
+                    try:
+                        gdf_post_exclusion = aplicar_exclusiones(
+                            gdf=gdf_para_generar, capas_exclusion=capas_exclusion,
+                            fields=grouping_cols, crs_target=cfg["PROJECTED_CRS"],
+                            output_gpkg=rutas['gpkg_exclusion']
+                        )
+                        resultados['gdf_post_exclusion'] = gdf_post_exclusion
+                        logger.info("Exclusiones aplicadas exitosamente.")
+                    except Exception as e:
+                        logger.error(f"Error aplicando exclusiones: {e}")
+                        logger.warning("Continuando sin aplicar exclusiones...")
+                        gdf_post_exclusion = gdf_para_generar.copy()
+                        
+                        # Agregar columnas para consistencia
+                        if 'area_m2' not in gdf_post_exclusion.columns:
+                            gdf_post_exclusion['area_m2'] = gdf_post_exclusion.geometry.area
+                        if 'area_ha_post_exclusion' not in gdf_post_exclusion.columns:
+                            gdf_post_exclusion['area_ha_post_exclusion'] = gdf_post_exclusion['area_m2'] / 10000
+                        
+                        resultados['gdf_post_exclusion'] = gdf_post_exclusion
+        else:
+            logger.info("Paso de exclusiones deshabilitado en la configuración.")
+            gdf_post_exclusion = gdf_para_generar
         
         puntos_gdf = None
         if 4 in op:

@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QCheckBox, QFileDialog
 )
 from PyQt6.QtCore import pyqtSignal, Qt
-from src.utils.gpkg_helpers import list_fields
 
 class GridCodeTab(QWidget):
     """
@@ -132,7 +131,7 @@ class GridCodeTab(QWidget):
         
         self.preview_text = QLabel("GridCode configuration will appear here...")
         self.preview_text.setWordWrap(True)
-        self.preview_text.setStyleSheet("background-color: #f0f0f0; padding: 10px; border: 1px solid #ccc;")
+        self.preview_text.setStyleSheet("background-color: #005A9C; padding: 10px; border: 1px solid #ccc;")
         preview_layout.addWidget(self.preview_text)
         
         form_layout.addWidget(preview_group)

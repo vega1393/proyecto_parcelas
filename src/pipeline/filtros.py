@@ -22,6 +22,9 @@ def aplicar_filtros_iniciales(
 
     Returns:
         GeoDataFrame filtrado
+        
+    Raises:
+        ValueError: Si no quedan registros después de aplicar los filtros
     """
     registros_iniciales = len(gdf)
     logger.info(f"Registros iniciales: {registros_iniciales}")
@@ -29,14 +32,51 @@ def aplicar_filtros_iniciales(
     for campo, filtro in filtros_campos.items():
         if campo in gdf.columns:
             logger.info(f"Aplicando filtro para {campo}")
+            
+            # Log valores únicos antes del filtro para diagnóstico
+            if not callable(filtro):
+                valores_unicos = gdf[campo].dropna().unique()
+                logger.info(f"Valores únicos en campo '{campo}': {list(valores_unicos)[:10]}{'...' if len(valores_unicos) > 10 else ''}")
+                logger.info(f"Valores buscados en filtro: {filtro}")
+                
+                # Verificar si algún valor del filtro existe en los datos
+                valores_encontrados = [v for v in filtro if v in valores_unicos]
+                valores_no_encontrados = [v for v in filtro if v not in valores_unicos]
+                
+                if valores_encontrados:
+                    logger.info(f"Valores del filtro encontrados en los datos: {valores_encontrados}")
+                if valores_no_encontrados:
+                    logger.warning(f"Valores del filtro NO encontrados en los datos: {valores_no_encontrados}")
+            
+            # Aplicar el filtro
             if callable(filtro):
                 gdf = gdf[gdf[campo].apply(filtro)].copy()
             else:
                 gdf = gdf[gdf[campo].isin(filtro)].copy()
-            logger.info(f"Registros después de filtrar por {campo}: {len(gdf)}")
+            
+            registros_despues = len(gdf)
+            logger.info(f"Registros después de filtrar por {campo}: {registros_despues}")
+            
+            # Advertir si el filtro eliminó todos los registros
+            if registros_despues == 0:
+                logger.error(f"El filtro para campo '{campo}' eliminó todos los registros.")
+                if not callable(filtro):
+                    logger.error(f"Ninguno de los valores buscados {filtro} se encontró en el campo '{campo}'.")
+                    logger.error(f"Considere revisar la configuración de filtros o usar el diálogo de selección de tipos de uso.")
+                raise ValueError(f"No quedan registros después de filtrar por campo '{campo}'. "
+                               f"Los valores del filtro {filtro if not callable(filtro) else 'función personalizada'} "
+                               f"no coinciden con los datos reales.")
         else:
             logger.warning(f"Campo {campo} no encontrado en los datos, se omite el filtro")
     
+    # Validación final
+    if len(gdf) == 0:
+        logger.error("No quedan registros después de aplicar todos los filtros.")
+        logger.error("Revise la configuración de filtros y asegúrese de que los valores coincidan con los datos reales.")
+        raise ValueError("No quedan registros después de aplicar los filtros iniciales. "
+                        "Revise la configuración de tipos de uso y otros filtros.")
+    
+    logger.info(f"Filtros aplicados exitosamente. Registros finales: {len(gdf)}")
     return gdf
 
 

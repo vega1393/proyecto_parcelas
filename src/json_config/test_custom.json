@@ -1,37 +1,99 @@
 {
-    "input_path": "C:/TRABAJO/06_proyectos/07_fasa2025/01_metricas/gpkg_e16_20250407_gridcode_metricas.gpkg",
-    "output_dir": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/proyecto_parcelas/test3",
-    "entrega": null,
+    "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E01_Metricas.gpkg",
+    "output_dir": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test03",
     "style": "custom",
+    "use_csv": false,
+    "csv_path": null,
+    "grouping_fields": [
+        "tipouso",
+        "tipomateri"
+    ],
+    "entrega": null,
     "cfg_overrides": {
-        "INTENSITY": 50,
-        "MIN_PARCELS": 1,
-        "MAX_PARCELS": 10,
-        "MIN_AREA": 0.3,
-        "BUFFER_DISTANCE": -20,
-        "MIN_DISTANCE": 60.0,
-        "PO_CONFIG": {
-            "ruta": "C:/TRABAJO/06_proyectos/07_fasa2025/04_po_operativo/uso_suelo_from_arauco/uso_suelo_202412.gpkg",
-            "capa": "uso_suelo_historico_202412",
-            "campos": [
-                "idpredio",
-                "id_rodal",
-                "tipo_uso",
-                "apl",
-                "mpl"
-            ]
-        },
-        "CAPAS_EXCLUSION": [
-            {
-                "path": "C:/TRABAJO/06_proyectos/07_fasa2025/03_capas_interes_fasa/raleos_20250421.gpkg",
-                "layer": "raleos_20250421",
-                "description": "raleos_20250421.gpkg"
-            },
-            {
-                "path": "C:/TRABAJO/06_proyectos/07_fasa2025/03_capas_interes_fasa/predios_rojos.gpkg",
-                "layer": "predios",
-                "description": "predios_rojos.gpkg"
+        "USE_GRIDCODE": true,
+        "USE_INTENSIDAD_ESPECIFICA": true,
+        "INTENSIDAD_POR_CAMPO": {
+            "tipouso": {
+                "EUGR": 50,
+                "EUUG": 50,
+                "EUUR": 50
             }
-        ]
+        },
+        "MIN_PARCELAS": 1,
+        "PROJECTED_CRS": 31982,
+        "PO_CONFIG": {
+            "ruta": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/01_po/01_po_from_arauco/po_brasil_2025_v04_usoabril.gpkg",
+            "capa": "uso_suelo",
+            "campos": [
+                "predio",
+                "rodal",
+                "anoplantac",
+                "talhao",
+                "mesplantac",
+                "tipouso",
+                "tipomateri"
+            ],
+            "campos_id_fasa": {
+                "predio": "predio",
+                "tipo": "tipouso"
+            }
+        },
+        "CAPAS_EXCLUSION": [],
+        "GRIDCODE_PARAMS": {
+            "field1": {
+                "field": "cov",
+                "bins": [
+                    {
+                        "max": 50.0,
+                        "id": 1
+                    },
+                    {
+                        "min": 50.0,
+                        "max": 70.0,
+                        "id": 2
+                    },
+                    {
+                        "min": 70.0,
+                        "id": 3
+                    }
+                ]
+            },
+            "field2": {
+                "field": "p95",
+                "bins": [
+                    {
+                        "max": 12.0,
+                        "id": 1
+                    },
+                    {
+                        "min": 12.0,
+                        "max": 16.0,
+                        "id": 2
+                    },
+                    {
+                        "min": 16.0,
+                        "max": 20.0,
+                        "id": 3
+                    },
+                    {
+                        "min": 20.0,
+                        "max": 24.0,
+                        "id": 4
+                    },
+                    {
+                        "min": 24.0,
+                        "id": 5
+                    }
+                ]
+            }
+        }
+    },
+    "delivery_code": "d01",
+    "date_today": "20250617",
+    "delivery_metadata": {
+        "description": "teste_description",
+        "version": "v01",
+        "operator": "vegatest",
+        "timestamp": "2025-06-17T10:16:47.587532"
     }
 }

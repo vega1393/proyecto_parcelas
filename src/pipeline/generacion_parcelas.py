@@ -90,7 +90,7 @@ def procesar_grupo_worker(group_data: tuple, gdf: gpd.GeoDataFrame, group_cols: 
         logger.error(f"Error processing group {group_id}: {e}", exc_info=True)
         return result
 
-def generar_parcelas(gdf: gpd.GeoDataFrame, group_cols: list, min_distance: float, output_path: str, grid_spacing: float = 20.0, retry_attempts: int = 3, retry_spacing_factor: float = 0.5) -> gpd.GeoDataFrame:
+def generar_parcelas(gdf: gpd.GeoDataFrame, group_cols: list, min_distance: float, output_path: str, grid_spacing: float = 20.0, retry_attempts: int = 5, retry_spacing_factor: float = 0.5) -> gpd.GeoDataFrame:
     """Orchestrates parcel generation with retry logic for failed groups."""
     logger.info("Starting flexible parcel generation...")
     # [CORRECCIÓN] Manejar el caso de un GDF de entrada vacío desde el principio

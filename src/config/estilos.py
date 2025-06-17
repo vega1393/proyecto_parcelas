@@ -50,11 +50,7 @@ Ecustom_CONFIG.update({
     # Parámetros principales
     "INTENSIDAD": 50,
     "USE_INTENSIDAD_ESPECIFICA": True,
-    "INTENSIDAD_POR_CAMPO": {
-        "tipouso": {
-            "PIRA": 140
-        }
-    },
+    "INTENSIDAD_POR_CAMPO": {},
     "MIN_PARCELAS": None,
     "MAX_PARCELAS": 10,
     "AREA_MINIMA_HA": 0.3,

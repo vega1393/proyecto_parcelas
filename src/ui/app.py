@@ -25,7 +25,7 @@ class ParcelGeneratorApp(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Parcel Generator - Enhanced")
-        self.setMinimumSize(1000, 800)  # Aumentado para acomodar nuevos tabs
+        self.setMinimumSize(800, 600)  # Aumentado para acomodar nuevos tabs
 
         self.process: Optional[QProcess] = None
         self._last_temp_config_path: Optional[str] = None
@@ -212,6 +212,44 @@ class ParcelGeneratorApp(QMainWindow):
         self.pipeline_tab.set_running_state(is_running=False)
         self.process = None
         
+        # Show user-friendly error messages for common issues
+        if exit_code != 0:
+            # Check for common configuration errors in the log
+            log_content = self.log_text.toPlainText()
+            
+            if "No quedan registros después de filtrar" in log_content or "Error en filtros iniciales" in log_content:
+                QMessageBox.warning(self, "Configuration Error - No Data After Filters", 
+                                  "The pipeline failed because no data remained after applying filters.\n\n"
+                                  "POSSIBLE SOLUTIONS:\n"
+                                  "• Check that the land use types in your configuration match the actual data\n"
+                                  "• Use 'Load Types from Plan Operativo' to automatically load correct types\n"
+                                  "• Review the filter configuration in the Pipeline tab\n"
+                                  "• Ensure the Plan Operativo is correctly configured\n\n"
+                                  "Check the log for detailed information about which values were found in your data.")
+            elif "DataSourceError" in log_content or "No such file or directory" in log_content:
+                QMessageBox.critical(self, "File Access Error", 
+                                   "The pipeline failed because it could not access required files.\n\n"
+                                   "POSSIBLE SOLUTIONS:\n"
+                                   "• Check that all input files exist and are accessible\n"
+                                   "• Verify file paths in your configuration\n"
+                                   "• Ensure you have read/write permissions for the specified directories\n"
+                                   "• Check that the Plan Operativo file and layer are correctly configured")
+            elif "ImportError" in log_content or "ModuleNotFoundError" in log_content:
+                QMessageBox.critical(self, "Dependency Error", 
+                                   "The pipeline failed due to missing dependencies.\n\n"
+                                   "POSSIBLE SOLUTIONS:\n"
+                                   "• Ensure all required Python packages are installed\n"
+                                   "• Check that your environment has geopandas, pyogrio, and other dependencies\n"
+                                   "• Try reinstalling the requirements: pip install -r requirements.txt")
+            else:
+                QMessageBox.critical(self, "Pipeline Error", 
+                                   f"The pipeline failed with exit code {exit_code}.\n\n"
+                                   "Please check the log for detailed error information.\n"
+                                   "Common issues include:\n"
+                                   "• Incorrect file paths or permissions\n"
+                                   "• Mismatched data types or field names\n"
+                                   "• Invalid configuration parameters")
+        
         if self._last_temp_config_path and os.path.exists(self._last_temp_config_path):
             try:
                 os.remove(self._last_temp_config_path)
@@ -247,8 +285,10 @@ class ParcelGeneratorApp(QMainWindow):
         if self.pipeline_config.get("PO_CONFIG"):
             full_config["cfg_overrides"]["PO_CONFIG"] = self.pipeline_config.get("PO_CONFIG")
         
-        if self.pipeline_config.get("CAPAS_EXCLUSION"):
-            full_config["cfg_overrides"]["CAPAS_EXCLUSION"] = self.pipeline_config.get("CAPAS_EXCLUSION")
+        # CRITICAL FIX: Always include CAPAS_EXCLUSION to override defaults
+        # If no exclusion layers are configured, send empty list to override base config
+        exclusion_layers = self.pipeline_config.get("CAPAS_EXCLUSION", [])
+        full_config["cfg_overrides"]["CAPAS_EXCLUSION"] = exclusion_layers
         
         # NUEVO: Agregar configuración de GridCode
         gridcode_config = self.pipeline_config.get("GRIDCODE_CONFIG", {})
@@ -359,10 +399,10 @@ class ParcelGeneratorApp(QMainWindow):
             "use_csv": pipeline_settings.get("use_csv"),
             "csv_path": pipeline_settings.get("csv_path"),
             "grouping_fields": pipeline_settings.get("grouping_fields", []),
+            "cfg_overrides": pipeline_settings.get("cfg_overrides", {}),
             "custom_params": {"intensity": self.pipeline_tab.intensity_spin.value()},
             "po_config": self.po_tab.get_config(),
             "exclusion_list": self.exclusion_tab.get_config(),
-            # NUEVOS
             "gridcode_config": self.gridcode_tab.get_config(),
             "delivery_config": self.delivery_tab.get_config()
         }
@@ -388,6 +428,7 @@ class ParcelGeneratorApp(QMainWindow):
             "use_csv": use_csv_value,
             "csv_path": settings.get("csv_path"),
             "grouping_fields": settings.get("grouping_fields", []),
+            "cfg_overrides": settings.get("cfg_overrides", {}),
             "custom_params": settings.get("custom_params")
         }
         
@@ -415,8 +456,35 @@ class ParcelGeneratorApp(QMainWindow):
         self._on_delivery_config_changed(self.delivery_tab.get_config())
         
         self.log_text.append("[INFO] Enhanced GUI settings loaded successfully.")
+
+    def _cleanup_temp_files(self) -> None:
+        """Clean up all temporary configuration files."""
+        # Clean specific temp file
+        if self._last_temp_config_path and os.path.exists(self._last_temp_config_path):
+            try:
+                os.remove(self._last_temp_config_path)
+                self.log_text.append(f"[INFO] Removed temporary config: {self._last_temp_config_path}")
+                self._last_temp_config_path = None
+            except Exception as e:
+                self.log_text.append(f"[WARNING] Could not remove temp file: {e}")
+        
+        # Clean up any orphaned temp files in json_config directory
+        json_config_dir = os.path.join(os.path.dirname(__file__), "..", "json_config")
+        if os.path.exists(json_config_dir):
+            try:
+                import glob
+                temp_files = glob.glob(os.path.join(json_config_dir, "tmp*.json"))
+                for temp_file in temp_files:
+                    try:
+                        os.remove(temp_file)
+                        self.log_text.append(f"[INFO] Cleaned up orphaned temp file: {os.path.basename(temp_file)}")
+                    except Exception as e:
+                        self.log_text.append(f"[WARNING] Could not remove orphaned temp file {temp_file}: {e}")
+            except Exception as e:
+                self.log_text.append(f"[WARNING] Error during temp files cleanup: {e}")
         
     def closeEvent(self, event):
+        """Clean up resources before closing."""
         if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
             reply = QMessageBox.question(
                 self, 'Process Still Running', 
@@ -426,8 +494,12 @@ class ParcelGeneratorApp(QMainWindow):
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self._stop_pipeline()
+                self._cleanup_temp_files()
+                self._save_gui_settings()
                 event.accept()
             else:
                 event.ignore()
         else:
+            self._cleanup_temp_files()
+            self._save_gui_settings()
             event.accept()

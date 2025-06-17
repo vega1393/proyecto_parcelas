@@ -73,35 +73,70 @@ def get_config(estilo: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[
     Obtiene la configuración para un estilo específico, aplicando overrides si se proporcionan.
     
     Args:
-        estilo: Nombre del estilo ('calibration', 'control', 'custom')
-        overrides: Diccionario con valores que sobrescriben la configuración por defecto
+        estilo: Nombre del estilo de configuración
+        overrides: Diccionario con valores a sobrescribir
         
     Returns:
-        Diccionario con la configuración completa
+        Diccionario con la configuración final
     """
-    # Mapeo de nombres en inglés a español para compatibilidad
-    estilo_map = {
-        "calibration": "calibracion",
-        "control": "control",
-        "custom": "ecustom"
-    }
-    estilo_interno = estilo_map.get(estilo, estilo)
-    if estilo_interno == "calibracion":
-        from src.config.estilos import CALIBRATION_CONFIG
-        cfg = CALIBRATION_CONFIG.copy()
-    elif estilo_interno == "control":
-        from src.config.estilos import CONTROL_CONFIG
-        cfg = CONTROL_CONFIG.copy()
-    elif estilo_interno == "ecustom":
-        from src.config.estilos import Ecustom_CONFIG
-        cfg = Ecustom_CONFIG.copy()
-    else:
-        raise ValueError(f"Estilo no reconocido: {estilo}")
+    from src.config.estilos import CALIBRATION_CONFIG, CONTROL_CONFIG, Ecustom_CONFIG
     
-    # Aplicar overrides si existen
+    # Seleccionar configuración base según el estilo
+    style_configs = {
+        "calibration": CALIBRATION_CONFIG,
+        "control": CONTROL_CONFIG,
+        "custom": Ecustom_CONFIG
+    }
+    
+    if estilo not in style_configs:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Estilo '{estilo}' no reconocido, usando 'custom'")
+        estilo = "custom"
+    
+    # Crear copia de la configuración base
+    cfg = style_configs[estilo].copy()
+    
+    # Aplicar overrides si se proporcionan
     if overrides:
-        for k, v in overrides.items():
-            if k in cfg and v is not None:
-                cfg[k] = v
+        cfg.update(overrides)
+    
+    # Sincronización automática de filtros basada en INTENSIDAD_POR_CAMPO
+    intensidad_por_campo = cfg.get("INTENSIDAD_POR_CAMPO", {})
+    
+    if intensidad_por_campo and "tipouso" in intensidad_por_campo:
+        tipos_configurados = list(intensidad_por_campo["tipouso"].keys())
+        if tipos_configurados:
+            # Actualizar los filtros para usar solo los tipos configurados
+            if "FILTROS_CAMPOS" not in cfg:
+                cfg["FILTROS_CAMPOS"] = {}
+            
+            # Mantener otros filtros (como apl) pero actualizar tipouso
+            filtros_actuales = cfg["FILTROS_CAMPOS"].copy()
+            filtros_actuales["tipouso"] = tipos_configurados
+            
+            # Si hay overrides específicos, remover filtros innecesarios como 'apl'
+            # cuando no están en los campos del PO
+            if overrides and "PO_CONFIG" in overrides:
+                po_campos = overrides["PO_CONFIG"].get("campos", [])
+                po_campos_lower = [c.lower() for c in po_campos]
+                
+                # Remover filtros para campos que no están en el PO
+                filtros_limpios = {}
+                for campo, filtro in filtros_actuales.items():
+                    if campo == "tipouso" or campo.lower() in po_campos_lower:
+                        filtros_limpios[campo] = filtro
+                    else:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.info(f"Removiendo filtro para campo '{campo}' (no presente en PO)")
+                
+                cfg["FILTROS_CAMPOS"] = filtros_limpios
+            else:
+                cfg["FILTROS_CAMPOS"] = filtros_actuales
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Filtros de tipouso actualizados dinámicamente: {tipos_configurados}")
     
     return cfg 

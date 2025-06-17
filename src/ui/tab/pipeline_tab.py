@@ -1,6 +1,7 @@
 # src/ui/tab/pipeline_tab.py
 
 import os
+import pandas as pd  # Movido al inicio para evitar imports repetidos
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, QComboBox, 
     QSpinBox, QDoubleSpinBox, QHBoxLayout, QProgressBar, QFileDialog, 
@@ -66,10 +67,146 @@ class PipelineTab(QWidget):
         self.style_combo.addItems(["calibration", "control", "custom"])
         self.form_layout.addRow("Processing Style:", self.style_combo)
         
+        # --- NUEVA SECCIÓN: Style Configuration Details ---
+        self.style_config_group = QGroupBox("Style Configuration Details")
+        style_config_layout = QVBoxLayout(self.style_config_group)
+        
+        # Información del estilo seleccionado
+        self.style_info_text = QTextEdit()
+        self.style_info_text.setMaximumHeight(120)
+        self.style_info_text.setReadOnly(True)
+        style_config_layout.addWidget(self.style_info_text)
+        
+        # --- SECCIÓN INDEPENDIENTE: GridCode Configuration ---
+        gridcode_group = QGroupBox("GridCode Configuration (Independent)")
+        gridcode_layout = QFormLayout(gridcode_group)
+        
+        self.use_gridcode_checkbox = QCheckBox("Enable GridCode calculation")
+        self.use_gridcode_checkbox.setToolTip("GridCode stratifies sampling based on coverage and height metrics")
+        gridcode_layout.addRow(self.use_gridcode_checkbox)
+        
+        style_config_layout.addWidget(gridcode_group)
+        
+        # --- SECCIÓN: Intensity Configuration ---
+        intensity_group = QGroupBox("Intensity Configuration")
+        intensity_layout = QVBoxLayout(intensity_group)
+        
+        # Base intensity
+        base_intensity_layout = QFormLayout()
+        self.base_intensity_spin = self._create_spinbox(10, 1000, 80)
+        base_intensity_layout.addRow("Base Intensity (ha per parcel):", self.base_intensity_spin)
+        intensity_layout.addLayout(base_intensity_layout)
+        
+        # Specific intensity toggle
+        self.use_specific_intensity_checkbox = QCheckBox("Use specific intensity by land use type")
+        self.use_specific_intensity_checkbox.setToolTip("Enable different intensities for different land use types")
+        intensity_layout.addWidget(self.use_specific_intensity_checkbox)
+        
+        # Intensity by Type (dinámico según Plan Operativo)
+        self.intensity_by_type_group = QGroupBox("Intensity by Land Use Type")
+        self.intensity_by_type_layout = QFormLayout(self.intensity_by_type_group)
+        
+        # Botón para cargar tipos de uso desde PO
+        load_po_types_layout = QHBoxLayout()
+        self.load_po_types_btn = QPushButton("Load Types from Plan Operativo")
+        self.load_po_types_btn.setToolTip("Load land use types from the configured Plan Operativo")
+        self.manual_add_type_btn = QPushButton("Add Type Manually")
+        self.clear_all_types_btn = QPushButton("Clear All")
+        load_po_types_layout.addWidget(self.load_po_types_btn)
+        load_po_types_layout.addWidget(self.manual_add_type_btn)
+        load_po_types_layout.addWidget(self.clear_all_types_btn)
+        load_po_types_layout.addStretch()
+        self.intensity_by_type_layout.addRow(load_po_types_layout)
+        
+        # Contenedor dinámico para los tipos de uso
+        self.land_use_scroll = QScrollArea()
+        self.land_use_widget = QWidget()
+        self.land_use_layout = QFormLayout(self.land_use_widget)
+        self.land_use_scroll.setWidget(self.land_use_widget)
+        self.land_use_scroll.setWidgetResizable(True)
+        self.land_use_scroll.setMaximumHeight(200)
+        
+        # Diccionario para almacenar los spinboxes dinámicos
+        self.intensity_spinboxes = {}
+        
+        self.intensity_by_type_layout.addRow(self.land_use_scroll)
+        intensity_layout.addWidget(self.intensity_by_type_group)
+        
+        style_config_layout.addWidget(intensity_group)
+        
+        # Controles específicos por estilo
+        style_params_group = QGroupBox("Style-Specific Parameters")
+        self.style_params_layout = QFormLayout(style_params_group)
+        
+        # Status labels
+        self.intensity_config_label = QLabel()
+        self.style_params_layout.addRow("Current Config:", self.intensity_config_label)
+        
+        # Parcel Limits Configuration
+        self.parcel_limits_group = QGroupBox("Parcel Count Limits")
+        parcel_limits_layout = QFormLayout(self.parcel_limits_group)
+        
+        self.min_parcels_enabled_checkbox = QCheckBox("Enable minimum parcels limit")
+        self.min_parcels_value_spin = self._create_spinbox(1, 100, 1)
+        min_parcels_layout = QHBoxLayout()
+        min_parcels_layout.addWidget(self.min_parcels_enabled_checkbox)
+        min_parcels_layout.addWidget(self.min_parcels_value_spin)
+        parcel_limits_layout.addRow("Minimum parcels:", min_parcels_layout)
+        
+        self.max_parcels_enabled_checkbox = QCheckBox("Enable maximum parcels limit")
+        self.max_parcels_value_spin = self._create_spinbox(1, 1000, 20)
+        max_parcels_layout = QHBoxLayout()
+        max_parcels_layout.addWidget(self.max_parcels_enabled_checkbox)
+        max_parcels_layout.addWidget(self.max_parcels_value_spin)
+        parcel_limits_layout.addRow("Maximum parcels:", max_parcels_layout)
+        
+        style_config_layout.addWidget(self.parcel_limits_group)
+        
+        # Area and Distance Parameters
+        self.area_distance_group = QGroupBox("Area and Distance Parameters")
+        area_distance_layout = QFormLayout(self.area_distance_group)
+        
+        # EPSG/CRS Configuration
+        self.projected_crs_spin = self._create_spinbox(1000, 99999, 32718)
+        self.projected_crs_spin.setToolTip("EPSG code for the projected coordinate system (e.g., 32718 for UTM 18S)")
+        area_distance_layout.addRow("Projected CRS (EPSG):", self.projected_crs_spin)
+        
+        self.min_area_value_spin = self._create_double_spinbox(0.01, 1000.0, 0.4, 0.01)
+        area_distance_layout.addRow("Min area (ha):", self.min_area_value_spin)
+        
+        self.buffer_value_spin = self._create_spinbox(-1000, 0, -30)
+        area_distance_layout.addRow("Buffer distance (m):", self.buffer_value_spin)
+        
+        self.min_distance_value_spin = self._create_double_spinbox(0.0, 1000.0, 80.0, 0.1)
+        area_distance_layout.addRow("Min distance between parcels (m):", self.min_distance_value_spin)
+        
+        style_config_layout.addWidget(self.area_distance_group)
+        
+        # Parcel Identification Parameters
+        self.parcel_id_group = QGroupBox("Parcel Identification")
+        parcel_id_layout = QFormLayout(self.parcel_id_group)
+        
+        self.id_parcela_inicio_value_spin = self._create_spinbox(0, 999999, 0)
+        parcel_id_layout.addRow("Starting Parcel ID:", self.id_parcela_inicio_value_spin)
+        
+        self.version_parcela_value_line = QLineEdit()
+        self.version_parcela_value_line.setPlaceholderText("e.g., A, B, v1")
+        parcel_id_layout.addRow("Parcel Version:", self.version_parcela_value_line)
+        
+        style_config_layout.addWidget(self.parcel_id_group)
+        
+        # Button to reset to default style values
+        self.reset_style_btn = QPushButton("Reset to Style Defaults")
+        self.reset_style_btn.setToolTip("Reset all parameters to the default values for the selected style")
+        style_config_layout.addWidget(self.reset_style_btn)
+        
+        style_config_layout.addWidget(style_params_group)
+        main_vbox.addWidget(self.style_config_group)
+        
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setFrameShadow(QFrame.Shadow.Sunken)
-        self.form_layout.addRow(line)
+        main_vbox.addWidget(line)
         
         # CSV Mode Section - MEJORADO
         csv_group = QGroupBox("CSV Configuration for External Parcel Counts")
@@ -145,39 +282,14 @@ class PipelineTab(QWidget):
         line2.setFrameShadow(QFrame.Shadow.Sunken)
         main_vbox.addWidget(line2)
         
-        # Custom Parameters Section
-        custom_label = QLabel("<b>Custom Parameters (only active when Style = 'custom'):</b>")
-        main_vbox.addWidget(custom_label)
+        # Legacy Parameters Section (for CSV mode compatibility)
+        legacy_label = QLabel("<b>Legacy Parameters (for CSV mode):</b>")
+        main_vbox.addWidget(legacy_label)
         
         # Intensity (for non-CSV mode)
         self.intensity_spin = self._create_spinbox(1, 1000, 80)
-        self.intensity_label = QLabel("Intensity (ha per parcel):")
+        self.intensity_label = QLabel("Base Intensity (ha per parcel):")
         self.form_layout.addRow(self.intensity_label, self.intensity_spin)
-        
-        # Min/Max Parcels
-        self.min_parcels_spin = self._create_spinbox(0, 100, 1)
-        self.form_layout.addRow("Min parcels per group:", self.min_parcels_spin)
-        
-        self.max_parcels_spin = self._create_spinbox(0, 1000, 20)
-        self.form_layout.addRow("Max parcels per group:", self.max_parcels_spin)
-        
-        # Area and Distance Parameters
-        self.min_area_spin = self._create_double_spinbox(0.01, 1000.0, 0.4, 0.01)
-        self.form_layout.addRow("Min area (ha):", self.min_area_spin)
-        
-        self.buffer_spin = self._create_spinbox(-1000, 0, -30)
-        self.form_layout.addRow("Buffer distance (m):", self.buffer_spin)
-        
-        self.min_distance_spin = self._create_double_spinbox(0.0, 1000.0, 80.0, 0.1)
-        self.form_layout.addRow("Min distance between parcels (m):", self.min_distance_spin)
-        
-        # Additional Custom Parameters
-        self.id_parcela_inicio_spin = self._create_spinbox(0, 999999, 0)
-        self.form_layout.addRow("Starting Parcel ID:", self.id_parcela_inicio_spin)
-        
-        self.version_parcela_line = QLineEdit()
-        self.version_parcela_line.setPlaceholderText("e.g., A, B, v1")
-        self.form_layout.addRow("Parcel Version:", self.version_parcela_line)
         
         # Run buttons and progress
         self.run_btn = QPushButton("Run Pipeline")
@@ -209,24 +321,53 @@ class PipelineTab(QWidget):
         return spin
 
     def _connect_signals(self) -> None:
+        """Conecta todas las señales de los widgets."""
+        # Señales básicas
         self.input_browse_btn.clicked.connect(self._select_input_file)
         self.select_group_fields_btn.clicked.connect(self._select_grouping_fields)
         self.output_browse_btn.clicked.connect(self._select_output_dir)
-        self.csv_browse_btn.clicked.connect(self._select_csv_file)
         self.run_btn.clicked.connect(self.runRequested.emit)
-        self.style_combo.currentTextChanged.connect(self._toggle_custom_params)
-        self.use_csv_checkbox.stateChanged.connect(self._toggle_generation_method)
-        self._toggle_custom_params(self.style_combo.currentText())
-        self._toggle_generation_method()
-
-        # CSV signals - NUEVOS
+        self.style_combo.currentTextChanged.connect(self._on_style_changed)
+        self.use_csv_checkbox.toggled.connect(self._toggle_generation_method)
+        
+        # Señales CSV
         self.csv_browse_btn.clicked.connect(self._select_csv_file)
         self.refresh_csv_fields_btn.clicked.connect(self._refresh_csv_fields)
         self.add_mapping_btn.clicked.connect(self._add_field_mapping)
         self.remove_mapping_btn.clicked.connect(self._remove_selected_mapping)
         self.auto_detect_mapping_btn.clicked.connect(self._auto_detect_field_mapping)
         self.csv_path_line.textChanged.connect(self._on_csv_path_changed)
-        self.count_column_combo.currentTextChanged.connect(lambda: self.configChanged.emit(self.get_config()) if hasattr(self, 'configChanged') else None)
+        self.count_column_combo.currentTextChanged.connect(
+            lambda: self.configChanged.emit(self.get_config()) if hasattr(self, 'configChanged') else None
+        )
+        
+        # Style signals
+        self.reset_style_btn.clicked.connect(self._reset_to_style_defaults)
+        
+        # GridCode and Intensity signals
+        self.use_gridcode_checkbox.toggled.connect(self._on_parameter_changed)
+        self.base_intensity_spin.valueChanged.connect(self._on_parameter_changed)
+        self.use_specific_intensity_checkbox.toggled.connect(self._on_specific_intensity_toggled)
+        
+        # Land use type management signals
+        self.load_po_types_btn.clicked.connect(self._load_po_land_use_types)
+        self.manual_add_type_btn.clicked.connect(self._add_land_use_type_manually)
+        self.clear_all_types_btn.clicked.connect(self._clear_all_land_use_types)
+        
+        # Parameter change signals (existing ones removed for dynamic spinboxes)
+        self.min_parcels_enabled_checkbox.toggled.connect(self._on_parameter_changed)
+        self.min_parcels_value_spin.valueChanged.connect(self._on_parameter_changed)
+        self.max_parcels_enabled_checkbox.toggled.connect(self._on_parameter_changed)
+        self.max_parcels_value_spin.valueChanged.connect(self._on_parameter_changed)
+        self.projected_crs_spin.valueChanged.connect(self._on_parameter_changed)
+        self.min_area_value_spin.valueChanged.connect(self._on_parameter_changed)
+        self.buffer_value_spin.valueChanged.connect(self._on_parameter_changed)
+        self.min_distance_value_spin.valueChanged.connect(self._on_parameter_changed)
+        self.id_parcela_inicio_value_spin.valueChanged.connect(self._on_parameter_changed)
+        self.version_parcela_value_line.textChanged.connect(self._on_parameter_changed)
+        
+        # Initialize style display
+        self._on_style_changed(self.style_combo.currentText())
 
     def _select_grouping_fields(self):
         """Permite al usuario seleccionar campos de agrupación del archivo de entrada."""
@@ -301,7 +442,6 @@ class PipelineTab(QWidget):
             return
             
         try:
-            import pandas as pd
             df = pd.read_csv(csv_path, nrows=0)  # Solo headers
             df.columns = [str(col).lower() for col in df.columns]  # Normalizar
             
@@ -333,7 +473,6 @@ class PipelineTab(QWidget):
             return
             
         try:
-            import pandas as pd
             df = pd.read_csv(csv_path, nrows=3)  # Solo 3 filas para preview
             df.columns = [str(col).lower() for col in df.columns]
             
@@ -361,7 +500,6 @@ class PipelineTab(QWidget):
         input_path = self.input_line.text().strip()
         if input_path and os.path.exists(input_path):
             try:
-                from src.utils.gpkg_helpers import list_layers, list_fields
                 layers = list_layers(input_path)
                 if layers:
                     fields = list_fields(input_path, layers[0])
@@ -398,9 +536,6 @@ class PipelineTab(QWidget):
         
         try:
             # Obtener campos de ambos archivos
-            from src.utils.gpkg_helpers import list_layers, list_fields
-            import pandas as pd
-            
             layers = list_layers(input_path)
             if not layers:
                 return
@@ -466,42 +601,157 @@ class PipelineTab(QWidget):
         self.csv_label.setVisible(use_csv)
         self.csv_path_line.setVisible(use_csv)
         self.csv_browse_btn.setVisible(use_csv)
-        self.intensity_label.setVisible(not use_csv)
-        self.intensity_spin.setVisible(not use_csv)
+        
+        # Legacy intensity control for CSV mode
+        if hasattr(self, 'intensity_label') and hasattr(self, 'intensity_spin'):
+            self.intensity_label.setVisible(not use_csv)
+            self.intensity_spin.setVisible(not use_csv)
 
-    def _toggle_custom_params(self, style: str):
-        """Habilita/deshabilita los parámetros custom según el estilo seleccionado."""
+    def _on_style_changed(self, style: str) -> None:
+        """Actualiza la información mostrada cuando cambia el estilo."""
+        from src.config.config_base import get_config
+        
+        try:
+            # Obtener la configuración del estilo
+            config = get_config(style)
+            
+            # Actualizar información del estilo
+            self._update_style_info(style, config)
+            
+            # Initialize GridCode with style default (if not already set by user)
+            if not hasattr(self, '_gridcode_user_set'):
+                self.use_gridcode_checkbox.setChecked(config.get('USE_GRIDCODE', False))
+            
+            # Actualizar los controles con los valores del estilo (solo como referencia)
+            self._load_style_configuration(config)
+            
+            # Actualizar visibilidad de controles
+            self._update_controls_visibility(style, config)
+            
+        except Exception as e:
+            self.style_info_text.setText(f"Error loading style configuration: {e}")
+            
+        # Mark that user may have changed gridcode manually after this point
+        self._gridcode_user_set = True
+
+    def _update_style_info(self, style: str, config: Dict[str, Any]) -> None:
+        """Actualiza el texto informativo del estilo."""
+        style_descriptions = {
+            "calibration": {
+                "title": "🎯 CALIBRATION Style",
+                "purpose": "Optimized for LiDAR model calibration",
+                "description": "Recommended to use GridCode stratification and specific intensities per land use type for scientific sampling."
+            },
+            "control": {
+                "title": "🎮 CONTROL Style", 
+                "purpose": "Controlled generation with strict limits",
+                "description": "Uniform intensity with parcel count limits to ensure predictable results. GridCode optional."
+            },
+            "custom": {
+                "title": "🔧 CUSTOM Style",
+                "purpose": "Flexible configuration for specific needs", 
+                "description": "Full flexibility - choose GridCode, intensity modes, and all parameters as needed."
+            }
+        }
+        
+        info = style_descriptions.get(style, {"title": "Unknown Style", "purpose": "", "description": ""})
+        
+        text = f"""<b>{info['title']}</b>
+<i>{info['purpose']}</i>
+
+{info['description']}
+
+<b>Style Defaults:</b>
+• Base Intensity: {config.get('INTENSIDAD', 'N/A')} ha/parcel
+• Specific Intensities: {'✅ Enabled' if config.get('USE_INTENSIDAD_ESPECIFICA') else '❌ Disabled'}
+• Min Parcels: {config.get('MIN_PARCELAS') if config.get('MIN_PARCELAS') is not None else 'No limit'}
+• Max Parcels: {config.get('MAX_PARCELAS') if config.get('MAX_PARCELAS') is not None else 'No limit'}
+• Min Area: {config.get('AREA_MINIMA_HA', 'N/A')} ha
+• Buffer: {config.get('BUFFER_DISTANCE', 'N/A')} m
+• Min Distance: {config.get('MIN_DISTANCE', 'N/A')} m
+
+<b>Note:</b> GridCode and specific intensities can be configured independently above."""
+        
+        self.style_info_text.setHtml(text)
+
+    def _load_style_configuration(self, config: Dict[str, Any]) -> None:
+        """Carga los valores de configuración del estilo en los controles."""
+        # Load base intensity
+        base_intensity = config.get('INTENSIDAD', 80)
+        self.base_intensity_spin.setValue(base_intensity)
+        
+        # Load specific intensity setting
+        use_specific = config.get('USE_INTENSIDAD_ESPECIFICA', False)
+        self.use_specific_intensity_checkbox.setChecked(use_specific)
+        
+        # Clear existing land use types and load from config
+        self._clear_all_land_use_types()
+        
+        if use_specific:
+            intensity_by_type = config.get('INTENSIDAD_POR_CAMPO', {}).get('tipouso', {})
+            for land_type, intensity_value in intensity_by_type.items():
+                self._add_land_use_type(land_type, intensity_value)
+        
+        # Update intensity configuration display
+        if use_specific:
+            intensity_by_type = config.get('INTENSIDAD_POR_CAMPO', {}).get('tipouso', {})
+            if intensity_by_type:
+                intensity_text = "✅ Specific by type: " + ", ".join([f"{k}:{v}" for k, v in intensity_by_type.items()])
+            else:
+                intensity_text = "✅ Enabled but no types defined"
+        else:
+            intensity_text = f"⚪ Uniform: {base_intensity} ha/parcel"
+        self.intensity_config_label.setText(intensity_text)
+        
+        # Parcel limits
+        min_parcels = config.get('MIN_PARCELAS')
+        self.min_parcels_enabled_checkbox.setChecked(min_parcels is not None)
+        self.min_parcels_value_spin.setValue(min_parcels if min_parcels is not None else 1)
+        
+        max_parcels = config.get('MAX_PARCELAS')
+        self.max_parcels_enabled_checkbox.setChecked(max_parcels is not None)
+        self.max_parcels_value_spin.setValue(max_parcels if max_parcels is not None else 20)
+        
+        # Area and distance parameters
+        self.min_area_value_spin.setValue(config.get('AREA_MINIMA_HA', 0.4))
+        self.buffer_value_spin.setValue(config.get('BUFFER_DISTANCE', -30))
+        self.min_distance_value_spin.setValue(config.get('MIN_DISTANCE', 80.0))
+        
+        # Parcel identification
+        self.id_parcela_inicio_value_spin.setValue(config.get('ID_PARCELA_INICIO', 0))
+        self.version_parcela_value_line.setText(config.get('VERSION_PARCELA', ''))
+
+    def _update_controls_visibility(self, style: str, config: Dict[str, Any]) -> None:
+        """Actualiza la visibilidad y habilitación de controles según el estilo."""
+        # GridCode is always available for any style
+        # No restrictions here
+        
+        # Specific intensity is always configurable
+        use_specific_intensity = self.use_specific_intensity_checkbox.isChecked()
+        self.intensity_by_type_group.setVisible(use_specific_intensity)
+        
+        # Enable/disable controls based on style
         is_custom = (style == "custom")
         
-        # Lista de todos los widgets de parámetros custom
-        custom_widgets = [
-            self.intensity_spin,
-            self.min_parcels_spin,
-            self.max_parcels_spin,
-            self.min_area_spin,
-            self.buffer_spin,
-            self.min_distance_spin,
-            self.id_parcela_inicio_spin,
-            self.version_parcela_line
-        ]
+        # In custom, most controls are editable; in others, some have restrictions
+        self.parcel_limits_group.setEnabled(is_custom or style == "control")
+        self.area_distance_group.setEnabled(is_custom)
+        self.parcel_id_group.setEnabled(is_custom)
         
-        # Habilitar/deshabilitar widgets
-        for widget in custom_widgets:
-            widget.setEnabled(is_custom)
-            
-        # Habilitar/deshabilitar labels asociados
-        for i in range(self.form_layout.rowCount()):
-            label = self.form_layout.itemAt(i, QFormLayout.ItemRole.LabelRole)
-            field = self.form_layout.itemAt(i, QFormLayout.ItemRole.FieldRole)
-            
-            if label and field:
-                label_widget = label.widget()
-                field_widget = field.widget() if hasattr(field, 'widget') else field.layout()
-                
-                # Verificar si el field contiene alguno de nuestros custom widgets
-                if field_widget and any(w == field_widget or (hasattr(field_widget, 'indexOf') and field_widget.indexOf(w) >= 0) for w in custom_widgets):
-                    if label_widget and label_widget != self.intensity_label:  # La intensity_label se maneja separadamente
-                        label_widget.setEnabled(is_custom)
+        # Intensity controls are always enabled but may have style-based recommendations
+        self.base_intensity_spin.setEnabled(True)
+        self.use_specific_intensity_checkbox.setEnabled(True)
+
+    def _reset_to_style_defaults(self) -> None:
+        """Resetea todos los parámetros a los valores por defecto del estilo."""
+        style = self.style_combo.currentText()
+        self._on_style_changed(style)
+        QMessageBox.information(self, "Reset Complete", f"All parameters have been reset to {style} style defaults.")
+
+    def _on_parameter_changed(self) -> None:
+        """Emite señal cuando algún parámetro cambia."""
+        # Opcional: emitir configuración actualizada
+        self.configChanged.emit(self.get_config())
 
     def get_config(self) -> Dict[str, Any]:
         """Genera la configuración completa del pipeline tab."""
@@ -518,30 +768,92 @@ class PipelineTab(QWidget):
             "cfg_overrides": {}
         }
         
-        # Solo agregar overrides si es custom
-        if style == "custom":
-            overrides = {}
+        # Get current style defaults to compare
+        from src.config.config_base import get_config as get_style_config
+        try:
+            default_config = get_style_config(style)
+        except:
+            default_config = {}
+        
+        # Always include overrides for independent configurations
+        overrides = {}
+        
+        # GridCode (independent of style)
+        use_gridcode = self.use_gridcode_checkbox.isChecked()
+        if use_gridcode != default_config.get('USE_GRIDCODE', False):
+            overrides["USE_GRIDCODE"] = use_gridcode
+        
+        # Base intensity (only if not using CSV)
+        if not use_csv:
+            base_intensity = self.base_intensity_spin.value()
+            if base_intensity != default_config.get('INTENSIDAD', 80):
+                overrides["INTENSIDAD"] = base_intensity
+        
+        # Specific intensity configuration
+        use_specific_intensity = self.use_specific_intensity_checkbox.isChecked()
+        if use_specific_intensity != default_config.get('USE_INTENSIDAD_ESPECIFICA', False):
+            overrides["USE_INTENSIDAD_ESPECIFICA"] = use_specific_intensity
+        
+        # Intensity by type (if specific intensity is enabled)
+        if use_specific_intensity and self.intensity_spinboxes:
+            intensity_by_type = {}
+            for land_type, widget_info in self.intensity_spinboxes.items():
+                intensity_by_type[land_type] = widget_info['spinbox'].value()
             
-            # Parámetros de intensidad (solo si no usa CSV)
-            if not use_csv:
-                overrides["INTENSIDAD"] = self.intensity_spin.value()
-            
-            # Parámetros de límites de parcelas
-            overrides["MIN_PARCELAS"] = self.min_parcels_spin.value() if self.min_parcels_spin.value() > 0 else None
-            overrides["MAX_PARCELAS"] = self.max_parcels_spin.value() if self.max_parcels_spin.value() > 0 else None
-            
-            # Parámetros de área y distancia
-            overrides["AREA_MINIMA_HA"] = self.min_area_spin.value()
-            overrides["BUFFER_DISTANCE"] = self.buffer_spin.value()
-            overrides["MIN_DISTANCE"] = self.min_distance_spin.value()
-            
-            # Parámetros de identificación
-            overrides["ID_PARCELA_INICIO"] = self.id_parcela_inicio_spin.value()
-            version_text = self.version_parcela_line.text().strip()
-            if version_text:
-                overrides["VERSION_PARCELA"] = version_text
-            
-            config["cfg_overrides"] = overrides
+            # CRITICAL FIX: Always include both when intensity types are configured
+            # This ensures that user-configured land use types are always applied
+            overrides["USE_INTENSIDAD_ESPECIFICA"] = True
+            overrides["INTENSIDAD_POR_CAMPO"] = {"tipouso": intensity_by_type}
+        elif not use_specific_intensity and default_config.get('USE_INTENSIDAD_ESPECIFICA', False):
+            # Clear intensity by type if disabling specific intensity
+            overrides["USE_INTENSIDAD_ESPECIFICA"] = False
+            overrides["INTENSIDAD_POR_CAMPO"] = {}
+        
+        # Parcel limits
+        if self.min_parcels_enabled_checkbox.isChecked():
+            min_parcels = self.min_parcels_value_spin.value()
+            if min_parcels != default_config.get('MIN_PARCELAS'):
+                overrides["MIN_PARCELAS"] = min_parcels
+        else:
+            if default_config.get('MIN_PARCELAS') is not None:
+                overrides["MIN_PARCELAS"] = None
+        
+        if self.max_parcels_enabled_checkbox.isChecked():
+            max_parcels = self.max_parcels_value_spin.value()
+            if max_parcels != default_config.get('MAX_PARCELAS'):
+                overrides["MAX_PARCELAS"] = max_parcels
+        else:
+            if default_config.get('MAX_PARCELAS') is not None:
+                overrides["MAX_PARCELAS"] = None
+        
+        # Area and distance parameters (only if custom style or changed)
+        projected_crs = self.projected_crs_spin.value()
+        if projected_crs != default_config.get('PROJECTED_CRS', 32718):
+            overrides["PROJECTED_CRS"] = projected_crs
+        
+        min_area = self.min_area_value_spin.value()
+        if min_area != default_config.get('AREA_MINIMA_HA', 0.4):
+            overrides["AREA_MINIMA_HA"] = min_area
+        
+        buffer_distance = self.buffer_value_spin.value()
+        if buffer_distance != default_config.get('BUFFER_DISTANCE', -30):
+            overrides["BUFFER_DISTANCE"] = buffer_distance
+        
+        min_distance = self.min_distance_value_spin.value()
+        if min_distance != default_config.get('MIN_DISTANCE', 80.0):
+            overrides["MIN_DISTANCE"] = min_distance
+        
+        # Parcel identification
+        id_inicio = self.id_parcela_inicio_value_spin.value()
+        if id_inicio != default_config.get('ID_PARCELA_INICIO', 0):
+            overrides["ID_PARCELA_INICIO"] = id_inicio
+        
+        version = self.version_parcela_value_line.text().strip()
+        if version != default_config.get('VERSION_PARCELA', ''):
+            overrides["VERSION_PARCELA"] = version
+        
+        # Always include overrides (even if empty for clarity)
+        config["cfg_overrides"] = overrides
         
         # CSV mapping avanzado
         if use_csv:
@@ -572,6 +884,13 @@ class PipelineTab(QWidget):
         if style_index >= 0:
             self.style_combo.setCurrentIndex(style_index)
         
+        # Get style defaults first
+        from src.config.config_base import get_config as get_style_config
+        try:
+            default_config = get_style_config(style)
+        except:
+            default_config = {}
+        
         # Aplicar overrides si existen
         overrides = config.get("cfg_overrides", {})
         custom_params = config.get("custom_params", {})  # Para compatibilidad con formato anterior
@@ -579,18 +898,64 @@ class PipelineTab(QWidget):
         # Combinar ambos diccionarios, dando prioridad a cfg_overrides
         all_params = {**custom_params, **overrides}
         
-        if all_params:
-            self.intensity_spin.setValue(all_params.get("INTENSIDAD", all_params.get("intensity", 80)))
-            self.min_parcels_spin.setValue(all_params.get("MIN_PARCELAS", 1))
-            self.max_parcels_spin.setValue(all_params.get("MAX_PARCELAS", 20))
-            self.min_area_spin.setValue(all_params.get("AREA_MINIMA_HA", 0.4))
-            self.buffer_spin.setValue(all_params.get("BUFFER_DISTANCE", -30))
-            self.min_distance_spin.setValue(all_params.get("MIN_DISTANCE", 80.0))
-            self.id_parcela_inicio_spin.setValue(all_params.get("ID_PARCELA_INICIO", 0))
-            self.version_parcela_line.setText(all_params.get("VERSION_PARCELA", ""))
+        # GridCode (independent configuration)
+        use_gridcode = all_params.get("USE_GRIDCODE", default_config.get("USE_GRIDCODE", False))
+        self.use_gridcode_checkbox.setChecked(use_gridcode)
         
-        # Aplicar visibilidad según estilo
-        self._toggle_custom_params(style)
+        # Base intensity
+        base_intensity = all_params.get("INTENSIDAD", default_config.get("INTENSIDAD", 80))
+        self.base_intensity_spin.setValue(base_intensity)
+        
+        # Specific intensity configuration
+        use_specific_intensity = all_params.get("USE_INTENSIDAD_ESPECIFICA", default_config.get("USE_INTENSIDAD_ESPECIFICA", False))
+        self.use_specific_intensity_checkbox.setChecked(use_specific_intensity)
+        
+        # Clear existing land use types
+        self._clear_all_land_use_types()
+        
+        # Load intensity by type if enabled
+        if use_specific_intensity:
+            intensity_by_type = all_params.get("INTENSIDAD_POR_CAMPO", default_config.get("INTENSIDAD_POR_CAMPO", {}))
+            if isinstance(intensity_by_type, dict) and "tipouso" in intensity_by_type:
+                tipo_intensities = intensity_by_type["tipouso"]
+                for land_type, intensity_value in tipo_intensities.items():
+                    self._add_land_use_type(land_type, intensity_value)
+        
+        # Parcel limits
+        min_parcels = all_params.get("MIN_PARCELAS", default_config.get("MIN_PARCELAS"))
+        self.min_parcels_enabled_checkbox.setChecked(min_parcels is not None)
+        self.min_parcels_value_spin.setValue(min_parcels if min_parcels is not None else 1)
+        
+        max_parcels = all_params.get("MAX_PARCELAS", default_config.get("MAX_PARCELAS"))
+        self.max_parcels_enabled_checkbox.setChecked(max_parcels is not None)
+        self.max_parcels_value_spin.setValue(max_parcels if max_parcels is not None else 20)
+        
+        # Area and distance parameters
+        self.projected_crs_spin.setValue(all_params.get("PROJECTED_CRS", default_config.get("PROJECTED_CRS", 32718)))
+        self.min_area_value_spin.setValue(all_params.get("AREA_MINIMA_HA", default_config.get("AREA_MINIMA_HA", 0.4)))
+        self.buffer_value_spin.setValue(all_params.get("BUFFER_DISTANCE", default_config.get("BUFFER_DISTANCE", -30)))
+        self.min_distance_value_spin.setValue(all_params.get("MIN_DISTANCE", default_config.get("MIN_DISTANCE", 80.0)))
+        
+        # Parcel identification
+        self.id_parcela_inicio_value_spin.setValue(all_params.get("ID_PARCELA_INICIO", default_config.get("ID_PARCELA_INICIO", 0)))
+        self.version_parcela_value_line.setText(all_params.get("VERSION_PARCELA", default_config.get("VERSION_PARCELA", "")))
+        
+        # Update style information and controls (but don't override user settings)
+        self._update_style_info(style, default_config)
+        self._update_controls_visibility(style, default_config)
+        
+        # Update intensity config label
+        if use_specific_intensity:
+            if self.intensity_spinboxes:
+                types_text = ", ".join([f"{k}:{v['spinbox'].value()}" for k, v in self.intensity_spinboxes.items()])
+                intensity_text = f"✅ Specific by type: {types_text}"
+            else:
+                intensity_text = "✅ Enabled but no types defined"
+        else:
+            intensity_text = f"⚪ Uniform: {base_intensity} ha/parcel"
+        self.intensity_config_label.setText(intensity_text)
+        
+        # Apply visibility
         self._toggle_generation_method()
         
         # CSV mapping avanzado
@@ -627,3 +992,131 @@ class PipelineTab(QWidget):
     def update_progress(self, value: int):
         """Actualiza la barra de progreso."""
         self.progress_bar.setValue(value)
+
+    def _on_specific_intensity_toggled(self, enabled: bool) -> None:
+        """Maneja la activación/desactivación de intensidad específica."""
+        self.intensity_by_type_group.setVisible(enabled)
+        self._on_parameter_changed()
+
+    def _load_po_land_use_types(self) -> None:
+        """Carga los tipos de uso de suelo desde el Plan Operativo configurado."""
+        try:
+            # Obtener configuración del PO desde el tab correspondiente
+            from src.ui.app import ParcelGeneratorApp
+            main_window = self.parent()
+            while main_window and not isinstance(main_window, ParcelGeneratorApp):
+                main_window = main_window.parent()
+            
+            if not main_window:
+                QMessageBox.warning(self, "Error", "Could not access main application window.")
+                return
+                
+            po_config = main_window.po_tab.get_config()
+            
+            if not po_config.get("ruta") or not po_config.get("capa"):
+                QMessageBox.warning(self, "PO Configuration Missing", 
+                                  "Please configure the Plan Operativo in the PO tab first.")
+                return
+            
+            # Open the new land use selection dialog
+            from src.ui.dialogs.po_landuse_dialog import POLandUseDialog
+            
+            dialog = POLandUseDialog(po_config, self)
+            
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                selected_field, selected_types = dialog.get_selected_types()
+                
+                if not selected_types:
+                    QMessageBox.information(self, "No Types Selected", 
+                                          "No land use types were selected.")
+                    return
+                
+                # Clear existing types and add the selected ones
+                self._clear_all_land_use_types()
+                
+                # Add each selected type with base intensity as default
+                base_intensity = self.base_intensity_spin.value()
+                for land_type in selected_types:
+                    self._add_land_use_type(land_type, base_intensity)
+                
+                # Show success message with summary
+                type_summary = ", ".join(selected_types[:5])
+                if len(selected_types) > 5:
+                    type_summary += f" and {len(selected_types) - 5} more"
+                
+                QMessageBox.information(self, "Success", 
+                                      f"Loaded {len(selected_types)} land use types from field '{selected_field}':\n\n{type_summary}\n\nYou can now adjust the intensity values for each type.\n\n🔄 IMPORTANT: The pipeline filters will automatically use these types instead of the default configuration values.")
+                
+        except ImportError as e:
+            QMessageBox.critical(self, "Import Error", 
+                               f"Failed to import required dialog:\n{str(e)}\n\nPlease ensure all dependencies are installed.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error Loading PO Types", 
+                               f"Failed to load land use types from Plan Operativo:\n{str(e)}")
+
+    def _add_land_use_type_manually(self) -> None:
+        """Permite agregar manualmente un tipo de uso de suelo."""
+        land_type, ok = QInputDialog.getText(self, "Add Land Use Type", 
+                                           "Enter land use type name:")
+        if ok and land_type.strip():
+            land_type = land_type.strip().upper()
+            if land_type not in self.intensity_spinboxes:
+                self._add_land_use_type(land_type, self.base_intensity_spin.value())
+            else:
+                QMessageBox.information(self, "Type Already Exists", 
+                                      f"Land use type '{land_type}' already exists.")
+
+    def _add_land_use_type(self, land_type: str, intensity_value: int = 100) -> None:
+        """Agrega un tipo de uso de suelo con su control de intensidad."""
+        if land_type in self.intensity_spinboxes:
+            return
+        
+        # Crear layout horizontal para el tipo
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Label del tipo
+        type_label = QLabel(f"{land_type}:")
+        type_label.setMinimumWidth(100)
+        
+        # Spinbox para intensidad
+        spinbox = self._create_spinbox(10, 1000, intensity_value)
+        spinbox.valueChanged.connect(self._on_parameter_changed)
+        
+        # Botón para eliminar este tipo
+        remove_btn = QPushButton("×")
+        remove_btn.setMaximumWidth(30)
+        remove_btn.setToolTip(f"Remove {land_type}")
+        remove_btn.clicked.connect(lambda: self._remove_land_use_type(land_type))
+        
+        row_layout.addWidget(type_label)
+        row_layout.addWidget(spinbox)
+        row_layout.addWidget(remove_btn)
+        
+        # Agregar al layout
+        self.land_use_layout.addRow(row_widget)
+        
+        # Almacenar referencia
+        self.intensity_spinboxes[land_type] = {
+            'spinbox': spinbox,
+            'row_widget': row_widget,
+            'remove_btn': remove_btn
+        }
+
+    def _remove_land_use_type(self, land_type: str) -> None:
+        """Elimina un tipo de uso de suelo."""
+        if land_type in self.intensity_spinboxes:
+            # Eliminar widget del layout
+            widget_info = self.intensity_spinboxes[land_type]
+            widget_info['row_widget'].setParent(None)
+            
+            # Eliminar del diccionario
+            del self.intensity_spinboxes[land_type]
+            
+            self._on_parameter_changed()
+
+    def _clear_all_land_use_types(self) -> None:
+        """Elimina todos los tipos de uso de suelo."""
+        for land_type in list(self.intensity_spinboxes.keys()):
+            self._remove_land_use_type(land_type)
