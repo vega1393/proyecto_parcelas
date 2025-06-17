@@ -8,6 +8,12 @@
         "tipouso",
         "tipomateri"
     ],
+    "cfg_overrides": {
+        "USE_INTENSIDAD_ESPECIFICA": false,
+        "INTENSIDAD_POR_CAMPO": {},
+        "MIN_PARCELAS": 1,
+        "PROJECTED_CRS": 31982
+    },
     "custom_params": {
         "intensity": 80
     },
@@ -84,8 +90,8 @@
         "delivery_code": "d01",
         "date_today": "20250617",
         "date_formatted": "2025-06-17",
-        "base_prefix": "br2025",
-        "custom_suffix": "_test",
+        "base_prefix": "",
+        "custom_suffix": "",
         "subdirectories": {
             "results": "results",
             "logs": "logs",
@@ -95,7 +101,7 @@
             "description": "teste_description",
             "version": "v01",
             "operator": "vegatest",
-            "timestamp": "2025-06-17T10:32:13.847718"
+            "timestamp": "2025-06-17T13:36:36.972421"
         }
     }
 }

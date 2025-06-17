@@ -295,6 +295,20 @@ class ParcelGeneratorApp(QMainWindow):
         if gridcode_config.get("enabled"):
             full_config["cfg_overrides"]["USE_GRIDCODE"] = True
             full_config["cfg_overrides"]["GRIDCODE_PARAMS"] = gridcode_config.get("gridcode_params", {})
+            
+            # CRITICAL FIX: Auto-include 'gridcode' in grouping fields when GridCode is enabled
+            grouping_fields = list(full_config.get("grouping_fields", []))
+            if "gridcode" not in grouping_fields:
+                grouping_fields.append("gridcode")
+                full_config["grouping_fields"] = grouping_fields
+                self.log_text.append("[INFO] GridCode enabled: automatically added 'gridcode' to grouping fields")
+        else:
+            # Remove 'gridcode' from grouping fields when GridCode is disabled
+            grouping_fields = list(full_config.get("grouping_fields", []))
+            if "gridcode" in grouping_fields:
+                grouping_fields.remove("gridcode")
+                full_config["grouping_fields"] = grouping_fields
+                self.log_text.append("[INFO] GridCode disabled: automatically removed 'gridcode' from grouping fields")
         
         # NUEVO: Agregar configuración de entrega
         delivery_config = self.pipeline_config.get("DELIVERY_CONFIG", {})

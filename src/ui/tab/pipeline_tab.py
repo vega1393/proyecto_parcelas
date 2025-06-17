@@ -77,16 +77,6 @@ class PipelineTab(QWidget):
         self.style_info_text.setReadOnly(True)
         style_config_layout.addWidget(self.style_info_text)
         
-        # --- SECCIÓN INDEPENDIENTE: GridCode Configuration ---
-        gridcode_group = QGroupBox("GridCode Configuration (Independent)")
-        gridcode_layout = QFormLayout(gridcode_group)
-        
-        self.use_gridcode_checkbox = QCheckBox("Enable GridCode calculation")
-        self.use_gridcode_checkbox.setToolTip("GridCode stratifies sampling based on coverage and height metrics")
-        gridcode_layout.addRow(self.use_gridcode_checkbox)
-        
-        style_config_layout.addWidget(gridcode_group)
-        
         # --- SECCIÓN: Intensity Configuration ---
         intensity_group = QGroupBox("Intensity Configuration")
         intensity_layout = QVBoxLayout(intensity_group)
@@ -344,8 +334,7 @@ class PipelineTab(QWidget):
         # Style signals
         self.reset_style_btn.clicked.connect(self._reset_to_style_defaults)
         
-        # GridCode and Intensity signals
-        self.use_gridcode_checkbox.toggled.connect(self._on_parameter_changed)
+        # Intensity signals
         self.base_intensity_spin.valueChanged.connect(self._on_parameter_changed)
         self.use_specific_intensity_checkbox.toggled.connect(self._on_specific_intensity_toggled)
         
@@ -618,9 +607,7 @@ class PipelineTab(QWidget):
             # Actualizar información del estilo
             self._update_style_info(style, config)
             
-            # Initialize GridCode with style default (if not already set by user)
-            if not hasattr(self, '_gridcode_user_set'):
-                self.use_gridcode_checkbox.setChecked(config.get('USE_GRIDCODE', False))
+            # Note: GridCode is now controlled exclusively from the GridCode Tab
             
             # Actualizar los controles con los valores del estilo (solo como referencia)
             self._load_style_configuration(config)
@@ -778,10 +765,7 @@ class PipelineTab(QWidget):
         # Always include overrides for independent configurations
         overrides = {}
         
-        # GridCode (independent of style)
-        use_gridcode = self.use_gridcode_checkbox.isChecked()
-        if use_gridcode != default_config.get('USE_GRIDCODE', False):
-            overrides["USE_GRIDCODE"] = use_gridcode
+        # Note: GridCode is now controlled exclusively from the GridCode Tab
         
         # Base intensity (only if not using CSV)
         if not use_csv:
@@ -898,9 +882,7 @@ class PipelineTab(QWidget):
         # Combinar ambos diccionarios, dando prioridad a cfg_overrides
         all_params = {**custom_params, **overrides}
         
-        # GridCode (independent configuration)
-        use_gridcode = all_params.get("USE_GRIDCODE", default_config.get("USE_GRIDCODE", False))
-        self.use_gridcode_checkbox.setChecked(use_gridcode)
+        # Note: GridCode is now controlled exclusively from the GridCode Tab
         
         # Base intensity
         base_intensity = all_params.get("INTENSIDAD", default_config.get("INTENSIDAD", 80))
