@@ -40,8 +40,16 @@ def analizar_perdidas_parcelas(
         return " | ".join(components)
 
     gdf_inicial['grupo_id'] = gdf_inicial.apply(get_grupo_id, axis=1)
-    grupos_inicial = gdf_inicial[['grupo_id',
-        'area_ha', 'n_parcelas', 'intensidad']].copy()
+    
+    # Verificar que existan las columnas necesarias
+    required_cols = ['grupo_id', 'area_ha', 'n_parcelas', 'intensidad']
+    available_cols = [col for col in required_cols if col in gdf_inicial.columns]
+    
+    if 'n_parcelas' not in gdf_inicial.columns:
+        logger.error("Columna 'n_parcelas' no encontrada en gdf_inicial. Análisis de pérdidas no puede continuar.")
+        return pd.DataFrame()  # Retornar DataFrame vacío
+    
+    grupos_inicial = gdf_inicial[available_cols].copy()
     grupos_inicial_con_parcelas = grupos_inicial[grupos_inicial['n_parcelas'] > 0]
     analisis_df = grupos_inicial_con_parcelas.copy()
     analisis_df['parcelas_post_filtros'] = 0
@@ -54,9 +62,12 @@ def analizar_perdidas_parcelas(
         for idx in analisis_df.index:
             gid = analisis_df.loc[idx, 'grupo_id']
             gf = gdf_post_filtros[gdf_post_filtros['grupo_id'] == gid]
-            if not gf.empty:
+            if not gf.empty and 'n_parcelas' in gf.columns:
                 analisis_df.loc[idx,
      'parcelas_post_filtros'] = gf['n_parcelas'].iloc[0]
+            elif not gf.empty:
+                logger.warning(f"Columna 'n_parcelas' no encontrada en gdf_post_filtros para grupo {gid}")
+                analisis_df.loc[idx, 'parcelas_post_filtros'] = 0
 
     if gdf_post_exclusion is not None:
         gdf_post_exclusion['grupo_id'] = gdf_post_exclusion.apply(
@@ -64,9 +75,12 @@ def analizar_perdidas_parcelas(
         for idx in analisis_df.index:
             gid = analisis_df.loc[idx, 'grupo_id']
             gf = gdf_post_exclusion[gdf_post_exclusion['grupo_id'] == gid]
-            if not gf.empty:
+            if not gf.empty and 'n_parcelas' in gf.columns:
                 analisis_df.loc[idx,
      'parcelas_post_exclusion'] = gf['n_parcelas'].iloc[0]
+            elif not gf.empty:
+                logger.warning(f"Columna 'n_parcelas' no encontrada en gdf_post_exclusion para grupo {gid}")
+                analisis_df.loc[idx, 'parcelas_post_exclusion'] = 0
 
     if gdf_final is not None:
         gdf_final['grupo_id'] = gdf_final.apply(get_grupo_id, axis=1)

@@ -56,6 +56,23 @@ def main():
 
     try:
         print("[DEBUG] Llamando a ejecutar_proceso...")
+        
+        # Extraer configuración de delivery
+        delivery_config = None
+        if params.get("delivery_code") or params.get("date_today"):
+            delivery_config = {
+                "delivery_code": params.get("delivery_code", "d01"),
+                "date_today": params.get("date_today", "20250617"),
+                "base_prefix": params.get("delivery_metadata", {}).get("base_prefix", ""),
+                "custom_suffix": params.get("delivery_metadata", {}).get("custom_suffix", ""),
+                "subdirectories": {
+                    "results": "results",
+                    "logs": "logs", 
+                    "summary": "summary"
+                }
+            }
+            print(f"[DEBUG] Delivery config extracted: {delivery_config}")
+        
         # Llamar a la función del pipeline con todos los parámetros
         ejecutar_proceso(
             input_path=params["input_path"],
@@ -66,7 +83,8 @@ def main():
             progress_callback=progress_callback,
             use_csv=params.get("use_csv", False),
             csv_path=params.get("csv_path"),
-            grouping_fields=params.get("grouping_fields")
+            grouping_fields=params.get("grouping_fields"),
+            delivery_config=delivery_config
         )
         print(json.dumps({"type": "success", "message": "Proceso completado con éxito."}), flush=True)
 

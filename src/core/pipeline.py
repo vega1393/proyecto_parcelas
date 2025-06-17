@@ -44,7 +44,8 @@ def ejecutar_proceso(
     progress_callback: Optional[Callable[[int, str], None]] = None,
     use_csv: bool = False,
     csv_path: Optional[str] = None,
-    grouping_fields: Optional[List[str]] = None
+    grouping_fields: Optional[List[str]] = None,
+    delivery_config: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Ejecuta todo el pipeline de generación de parcelas.
@@ -60,11 +61,15 @@ def ejecutar_proceso(
     if "CAPAS_EXCLUSION" in cfg and cfg["CAPAS_EXCLUSION"]:
         cfg["CAPAS_EXCLUSION"] = normalize_exclusion_layers(cfg["CAPAS_EXCLUSION"])
 
-    rutas = configurar_rutas(input_path, output_dir)
+    rutas = configurar_rutas(input_path, output_dir, delivery_config)
     setup_logging(rutas['log_file'])
     logger.info(f"=== Iniciando proceso con estilo '{estilo}' ===")
     if cfg_overrides:
         logger.info(f"Overrides aplicados: {cfg_overrides}")
+    
+    # Log delivery configuration if provided
+    if delivery_config:
+        logger.info(f"Delivery configuration: {delivery_config}")
 
     report_progress(5, "Configurando...")
     resultados = {'rutas': rutas, 'config': cfg}
@@ -130,26 +135,27 @@ def ejecutar_proceso(
                 grouping_cols.append('gridcode')
 
         if use_csv:
-            report_progress(25, "Procesando con CSV de entrada...")
-            logger.info(f"Usando modo CSV. Leyendo conteo de parcelas desde: {csv_path}")
-            if not csv_path or not os.path.exists(csv_path):
-                raise FileNotFoundError(f"Archivo CSV de entrada no encontrado en: {csv_path}")
-
-            df_csv = pd.read_csv(csv_path)
-            df_csv.columns = [c.lower() for c in df_csv.columns]
-            count_col = 'n' if 'n' in df_csv.columns else 'n_parcelas'
-            if count_col not in df_csv.columns:
-                raise ValueError(f"El CSV debe contener una columna llamada 'n' o 'n_parcelas'.")
+            report_progress(22, "Generando áreas agrupadas (modo CSV)...")
+            logger.info(f"Usando modo CSV. Generando áreas intermedias antes de aplicar CSV...")
             
-            for col in grouping_cols:
-                if col not in df_csv.columns: raise ValueError(f"Columna de agrupación '{col}' no encontrada en el CSV.")
-                if col not in gdf.columns: raise ValueError(f"Columna de agrupación '{col}' no encontrada en el GPKG de entrada.")
-
-            df_csv[count_col] = pd.to_numeric(df_csv[count_col], errors='coerce').fillna(0).astype(int)
-            gdf_para_generar = gdf.merge(df_csv, on=grouping_cols, how="left")
-            gdf_para_generar.rename(columns={count_col: 'n_parcelas'}, inplace=True)
-            gdf_para_generar['n_parcelas'] = gdf_para_generar['n_parcelas'].fillna(0).astype(int)
-            resultados['gdf_inicial'] = gdf_para_generar
+            # PASO 1: Generar áreas agrupadas (proceso normal sin CSV aún)
+            gdf_areas_agrupadas = calcular_cantidad_de_parcelas(
+                gdf=gdf, fields=grouping_cols, intensidad=cfg["INTENSIDAD"],
+                use_intensidad_especifica=cfg["USE_INTENSIDAD_ESPECIFICA"],
+                intensidad_por_campo=cfg["INTENSIDAD_POR_CAMPO"],
+                min_parcelas=cfg["MIN_PARCELAS"], max_parcelas=cfg["MAX_PARCELAS"],
+                area_minima_ha=cfg["AREA_MINIMA_HA"], buffer_distance=cfg["BUFFER_DISTANCE"],
+                output_csv=rutas['csv_resumen'], output_gpkg=rutas['gpkg_areas'],
+                output_gpkg_dissolved_initial=rutas['gpkg_inicial']
+            )
+            
+            # Cargar las áreas generadas
+            resultados['gdf_inicial'] = gpd.read_file(rutas['gpkg_inicial'], engine='pyogrio')
+            resultados['gdf_post_filtros'] = gpd.read_file(rutas['gpkg_areas'], engine='pyogrio')
+            
+            # CONTINUAR con el flujo normal (sin aplicar CSV aún)
+            gdf_para_generar = gdf_areas_agrupadas
+            
         else:
             if 2 in op:
                 report_progress(25, "Calculando cantidad de parcelas por intensidad...")
@@ -238,6 +244,78 @@ def ejecutar_proceso(
         else:
             logger.info("Paso de exclusiones deshabilitado en la configuración.")
             gdf_post_exclusion = gdf_para_generar
+        
+        # [NUEVO] APLICAR CSV DESPUÉS DE EXCLUSIONES
+        if use_csv:
+            report_progress(45, "Aplicando conteos desde CSV post-exclusión...")
+            logger.info(f"Aplicando conteos desde CSV después de exclusiones: {csv_path}")
+            
+            # Validar y leer CSV
+            if not csv_path or not os.path.exists(csv_path):
+                raise FileNotFoundError(f"Archivo CSV de entrada no encontrado en: {csv_path}")
+
+            df_csv = pd.read_csv(csv_path)
+            df_csv.columns = [c.lower() for c in df_csv.columns]
+            logger.info(f"CSV leído exitosamente. Columnas: {list(df_csv.columns)}")
+            
+            count_col = 'n_parcelas' if 'n_parcelas' in df_csv.columns else ('n' if 'n' in df_csv.columns else None)
+            if count_col is None:
+                raise ValueError(f"El CSV debe contener una columna llamada 'n' o 'n_parcelas'. Columnas encontradas: {list(df_csv.columns)}")
+            
+            for col in grouping_cols:
+                if col not in df_csv.columns: 
+                    raise ValueError(f"Columna de agrupación '{col}' no encontrada en el CSV. Columnas disponibles: {list(df_csv.columns)}")
+                if col not in gdf_post_exclusion.columns: 
+                    raise ValueError(f"Columna de agrupación '{col}' no encontrada en las áreas post-exclusión.")
+
+            df_csv[count_col] = pd.to_numeric(df_csv[count_col], errors='coerce').fillna(0).astype(int)
+            
+            # Harmonizar tipos de datos para el merge
+            for col in grouping_cols:
+                if col in gdf_post_exclusion.columns and col in df_csv.columns:
+                    # Si gridcode o cualquier columna numérica, convertir ambas a string para merge consistente
+                    if col == 'gridcode' or gdf_post_exclusion[col].dtype in ['int64', 'float64'] or df_csv[col].dtype in ['int64', 'float64']:
+                        gdf_post_exclusion[col] = gdf_post_exclusion[col].astype(str)
+                        df_csv[col] = df_csv[col].astype(str)
+                        logger.info(f"Harmonizando tipos para columna '{col}': convertido a string para merge")
+            
+            # Merge con CSV (reemplaza n_parcelas con el del CSV)
+            logger.info(f"Intentando merge entre {len(gdf_post_exclusion)} grupos post-exclusión y {len(df_csv)} filas del CSV")
+            logger.info(f"Columnas de agrupación para merge: {grouping_cols}")
+            
+            # Debug: mostrar algunos ejemplos de cada DataFrame
+            logger.info(f"Primeras 3 filas post-exclusión: {gdf_post_exclusion[grouping_cols].head(3).to_dict('records')}")
+            logger.info(f"Primeras 3 filas del CSV: {df_csv[grouping_cols].head(3).to_dict('records')}")
+            
+            gdf_post_exclusion = gdf_post_exclusion.merge(df_csv, on=grouping_cols, how="left")
+            logger.info(f"Resultado del merge: {len(gdf_post_exclusion)} filas")
+            
+            # Verificar si el merge fue exitoso y manejar columnas
+            if f"{count_col}_y" in gdf_post_exclusion.columns:
+                # Merge exitoso con sufijos automáticos
+                logger.info("Merge exitoso detectado (con sufijos _x, _y)")
+                gdf_post_exclusion['n_parcelas'] = gdf_post_exclusion[f"{count_col}_y"].fillna(0).astype(int)
+                gdf_post_exclusion = gdf_post_exclusion.drop(columns=[f"{count_col}_x", f"{count_col}_y"], errors='ignore')
+            elif count_col in gdf_post_exclusion.columns and count_col != 'n_parcelas':
+                # El CSV tenía una columna diferente a n_parcelas
+                logger.info(f"Usando columna '{count_col}' del CSV como n_parcelas")
+                gdf_post_exclusion['n_parcelas'] = gdf_post_exclusion[count_col].fillna(0).astype(int)
+            elif 'n_parcelas' in gdf_post_exclusion.columns:
+                # Ya existe n_parcelas
+                logger.info("Columna 'n_parcelas' actualizada desde CSV")
+            else:
+                # Si no existe la columna, crear con valores por defecto
+                logger.warning(f"No se pudo aplicar CSV. Creando n_parcelas con valor 1 por defecto.")
+                gdf_post_exclusion['n_parcelas'] = 1
+            
+            # Limpiar columnas extra del CSV que no necesitamos
+            csv_extra_cols = [col for col in gdf_post_exclusion.columns if col.endswith('_y') or col in ['area_ha_y', 'area_m2_y', 'intensidad_y']]
+            if csv_extra_cols:
+                gdf_post_exclusion = gdf_post_exclusion.drop(columns=csv_extra_cols, errors='ignore')
+                logger.info(f"Columnas extra del CSV eliminadas: {csv_extra_cols}")
+            
+            logger.info(f"CSV aplicado exitosamente. {len(gdf_post_exclusion)} grupos con n_parcelas desde CSV.")
+            resultados['gdf_post_exclusion'] = gdf_post_exclusion
         
         puntos_gdf = None
         if 4 in op:

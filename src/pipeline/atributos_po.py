@@ -124,7 +124,7 @@ def asignar_atributos_po(parcelas_gdf: gpd.GeoDataFrame, po_config: Dict[str, An
                 # Create sequential number within each property
                 parcels_with_po['_temp_serial'] = parcels_with_po.groupby(predio_field).cumcount() + 1
                 
-                parcels_with_po['id_parcela_final'] = (
+                parcels_with_po['id_parcel'] = (
                     parcels_with_po[tipo_field].astype(str).str.strip() + '_' +
                     parcels_with_po[predio_field].astype(str).str.strip() + '_' +
                     parcels_with_po['_temp_serial'].astype(str).str.zfill(3) +
@@ -134,10 +134,10 @@ def asignar_atributos_po(parcelas_gdf: gpd.GeoDataFrame, po_config: Dict[str, An
                 logger.info("Final parcel IDs generated successfully")
             else:
                 logger.warning(f"Fields exist but have no values: {predio_field}={predio_values}, {tipo_field}={tipo_values}")
-                parcels_with_po['id_parcela_final'] = parcels_with_po['id_parcela']
+                parcels_with_po['id_parcel'] = parcels_with_po['id_parcela']
         else:
             logger.warning(f"Could not generate final ID. Missing required fields: {predio_field}, {tipo_field}")
-            parcels_with_po['id_parcela_final'] = parcels_with_po['id_parcela']
+            parcels_with_po['id_parcel'] = parcels_with_po['id_parcela']
 
     if output_path:
         logger.info(f"Saving {len(parcels_with_po)} parcels with PO attributes to: {output_path}")

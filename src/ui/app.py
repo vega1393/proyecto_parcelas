@@ -5,6 +5,7 @@ import sys
 import json
 import tempfile
 from typing import Dict, Any, Optional, List
+from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
@@ -20,6 +21,7 @@ from src.ui.tab.exclusion_tab import ExclusionTab
 from src.ui.tab.config_tab import ConfigTab
 from src.ui.tab.gridcode_tab import GridCodeTab
 from src.ui.tab.delivery_tab import DeliveryTab
+from src.ui.tab.column_order_tab import ColumnOrderTab
 
 class ParcelGeneratorApp(QMainWindow):
     def __init__(self) -> None:
@@ -54,6 +56,7 @@ class ParcelGeneratorApp(QMainWindow):
         # Nuevos tabs
         self.gridcode_tab = GridCodeTab()
         self.delivery_tab = DeliveryTab()
+        self.column_order_tab = ColumnOrderTab()
         
         # Agregar tabs en orden lógico
         tabs.addTab(self.pipeline_tab, "Pipeline")
@@ -61,6 +64,7 @@ class ParcelGeneratorApp(QMainWindow):
         tabs.addTab(self.po_tab, "Plan Operative (PO)")
         tabs.addTab(self.exclusion_tab, "Exclusion Layers")
         tabs.addTab(self.delivery_tab, "Delivery")  # NUEVO
+        tabs.addTab(self.column_order_tab, "Column Order")  # NUEVO
         tabs.addTab(self.config_tab, "Configuration")
         
         # Log widget
@@ -95,6 +99,7 @@ class ParcelGeneratorApp(QMainWindow):
         # Nuevas señales
         self.gridcode_tab.configChanged.connect(self._on_gridcode_config_changed)
         self.delivery_tab.configChanged.connect(self._on_delivery_config_changed)
+        self.column_order_tab.configChanged.connect(self._on_column_order_config_changed)
         
         # Señales de configuración
         self.config_tab.findChild(QPushButton, "export_config_btn").clicked.connect(self._export_config)
@@ -123,6 +128,44 @@ class ParcelGeneratorApp(QMainWindow):
         self.pipeline_config['DELIVERY_CONFIG'] = delivery_config
         self.log_text.append(f"[INFO] Delivery configuration updated: {delivery_config.get('delivery_code', 'N/A')}")
 
+    def _on_column_order_config_changed(self, column_order_config: Dict[str, Any]):
+        """Maneja cambios en la configuración de orden de columnas."""
+        if column_order_config.get("action") == "request_pipeline_output":
+            # Obtener la ruta de salida final del pipeline
+            pipeline_config = self.pipeline_tab.get_config()
+            output_dir = pipeline_config.get("output_dir")
+            
+            if output_dir:
+                # Construir la ruta del archivo final usando la configuración de delivery
+                delivery_config = self.pipeline_config.get("DELIVERY_CONFIG", {})
+                date_str = delivery_config.get("date_today", "20250617")
+                delivery_code = delivery_config.get("delivery_code", "d01")
+                base_prefix = delivery_config.get("base_prefix", "")
+                custom_suffix = delivery_config.get("custom_suffix", "")
+                
+                # Construir nombre base
+                name_parts = []
+                if base_prefix:
+                    name_parts.append(base_prefix)
+                if delivery_code:
+                    name_parts.append(delivery_code.upper())
+                
+                base_name = "_".join(name_parts) if name_parts else "E02"
+                if custom_suffix:
+                    base_name += custom_suffix
+                
+                final_file_path = os.path.join(output_dir, "results", f"{date_str}_{base_name}_PARCELAS_FINALES.gpkg")
+                
+                # Enviar la ruta al tab de column order
+                self.column_order_tab.set_pipeline_output_path(final_file_path)
+                self.log_text.append(f"[INFO] Set pipeline output path for column ordering: {final_file_path}")
+            else:
+                self.log_text.append("[WARNING] No output directory configured in pipeline.")
+                QMessageBox.warning(self, "Warning", "Please configure an output directory in the Pipeline tab first.")
+        else:
+            self.pipeline_config['COLUMN_ORDER_CONFIG'] = column_order_config
+            self.log_text.append(f"[INFO] Column order configuration updated.")
+
     def _run_pipeline(self):
         full_config = self._get_full_pipeline_config()
         if not full_config.get("input_path") or not os.path.exists(full_config.get("input_path")):
@@ -133,11 +176,16 @@ class ParcelGeneratorApp(QMainWindow):
             return
         
         try:
+            # Crear archivo temporal para el pipeline
             json_config_dir = os.path.join(os.path.dirname(__file__), "..", "json_config")
             os.makedirs(json_config_dir, exist_ok=True)
             with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json", dir=json_config_dir, encoding="utf-8") as tmp:
                 json.dump(full_config, tmp, indent=4)
                 self._last_temp_config_path = tmp.name
+                
+            # NUEVO: Guardar copia del JSON en el directorio de salida para historial
+            self._save_config_history(full_config)
+                
         except Exception as e:
             QMessageBox.critical(self, "Config Error", f"Failed to create temporary config file: {e}")
             return
@@ -387,12 +435,16 @@ class ParcelGeneratorApp(QMainWindow):
                 "metadata": config.get("delivery_metadata", {})
             }
             
+            # NUEVOS
+            column_order_config = config.get("column_order_config", {})
+            
             # Aplicar configuraciones
             self.pipeline_tab.set_config(pipeline_config)
             self.po_tab.set_config(po_config)
             self.exclusion_tab.set_config(exclusion_config)
             self.gridcode_tab.set_config(gridcode_config)
             self.delivery_tab.set_config(delivery_config)
+            self.column_order_tab.set_config(column_order_config)
             
             self.log_text.append(f"[SUCCESS] Enhanced configuration successfully imported from: {file_path}")
             QMessageBox.information(self, "Import Successful", f"Configuration loaded from:\n{file_path}")
@@ -418,7 +470,8 @@ class ParcelGeneratorApp(QMainWindow):
             "po_config": self.po_tab.get_config(),
             "exclusion_list": self.exclusion_tab.get_config(),
             "gridcode_config": self.gridcode_tab.get_config(),
-            "delivery_config": self.delivery_tab.get_config()
+            "delivery_config": self.delivery_tab.get_config(),
+            "column_order_config": self.column_order_tab.get_config()
         }
         
         # Agregar mapeo CSV si está activo
@@ -457,12 +510,14 @@ class ParcelGeneratorApp(QMainWindow):
         # NUEVOS
         gridcode_config = settings.get("gridcode_config", {"enabled": False})
         delivery_config = settings.get("delivery_config", {})
+        column_order_config = settings.get("column_order_config", {})
 
         self.pipeline_tab.set_config(pipeline_config)
         self.po_tab.set_config(po_config)
         self.exclusion_tab.set_config(exclusion_config)
         self.gridcode_tab.set_config(gridcode_config)
         self.delivery_tab.set_config(delivery_config)
+        self.column_order_tab.set_config(column_order_config)
         
         self._on_po_config_changed(self.po_tab.get_config())
         self._on_exclusions_changed(self.exclusion_tab.get_config())
@@ -517,3 +572,55 @@ class ParcelGeneratorApp(QMainWindow):
             self._cleanup_temp_files()
             self._save_gui_settings()
             event.accept()
+
+    def _save_config_history(self, config: Dict[str, Any]) -> None:
+        """Guarda una copia del JSON de configuración en el directorio de salida para historial."""
+        try:
+            output_dir = config.get("output_dir")
+            if not output_dir:
+                return
+                
+            # Crear directorio de configuraciones si no existe
+            config_history_dir = os.path.join(output_dir, "config")
+            os.makedirs(config_history_dir, exist_ok=True)
+            
+            # Generar nombre del archivo de configuración usando la nomenclatura de delivery
+            delivery_config = self.pipeline_config.get("DELIVERY_CONFIG", {})
+            date_str = delivery_config.get("date_today", "20250617")
+            delivery_code = delivery_config.get("delivery_code", "d01")
+            base_prefix = delivery_config.get("base_prefix", "")
+            custom_suffix = delivery_config.get("custom_suffix", "")
+            
+            # Construir nombre base
+            name_parts = []
+            if base_prefix:
+                name_parts.append(base_prefix)
+            if delivery_code:
+                name_parts.append(delivery_code.upper())
+            
+            base_name = "_".join(name_parts) if name_parts else "CONFIG"
+            if custom_suffix:
+                base_name += custom_suffix
+                
+            config_filename = f"{date_str}_{base_name}_pipeline_config.json"
+            config_path = os.path.join(config_history_dir, config_filename)
+            
+            # Agregar metadatos adicionales al JSON de historial
+            config_with_metadata = config.copy()
+            config_with_metadata["_metadata"] = {
+                "generated_at": datetime.now().isoformat(),
+                "generated_by": "Parcel Generator Enhanced GUI",
+                "version": "1.0",
+                "description": "Configuration used for parcel generation pipeline execution",
+                "delivery_info": delivery_config
+            }
+            
+            # Guardar archivo de configuración
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_with_metadata, f, indent=4, ensure_ascii=False)
+                
+            self.log_text.append(f"[INFO] Configuration saved to history: {config_path}")
+            
+        except Exception as e:
+            self.log_text.append(f"[WARNING] Could not save configuration history: {e}")
+            # No fallar el pipeline si no se puede guardar el historial
