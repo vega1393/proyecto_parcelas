@@ -51,22 +51,20 @@ class ParcelGeneratorApp(QMainWindow):
         # Tabs principales
         tabs = QTabWidget()
         
-        # Tabs existentes
+        # Initialize all tabs
         self.pipeline_tab = PipelineTab()
-        self.sampling_tab = SamplingTab()  # NUEVO
+        self.sampling_tab = SamplingTab()
         self.po_tab = POTab()
         self.exclusion_tab = ExclusionTab()
         self.config_tab = ConfigTab()
-        
-        # Nuevos tabs
         self.gridcode_tab = GridCodeTab()
         self.delivery_tab = DeliveryTab()
         self.column_order_tab = ColumnOrderTab()
         self.help_tab = HelpTab()
         
-        # Agregar tabs en orden lógico
+        # Add tabs in logical order
         tabs.addTab(self.pipeline_tab, "Pipeline")
-        tabs.addTab(self.sampling_tab, "Sampling Method")  # NUEVO
+        tabs.addTab(self.sampling_tab, "Sampling Method")
         tabs.addTab(self.gridcode_tab, "GridCode")
         tabs.addTab(self.po_tab, "Plan Operative (PO)")
         tabs.addTab(self.exclusion_tab, "Exclusion Layers")
@@ -190,8 +188,8 @@ class ParcelGeneratorApp(QMainWindow):
         self.po_tab.configChanged.connect(self._on_po_config_changed)
         self.exclusion_tab.configChanged.connect(self._on_exclusions_changed)
         
-        # Nuevas señales
-        self.sampling_tab.configChanged.connect(self._on_sampling_config_changed)  # NUEVO
+        # Additional signals
+        self.sampling_tab.configChanged.connect(self._on_sampling_config_changed)
         self.gridcode_tab.configChanged.connect(self._on_gridcode_config_changed)
         self.delivery_tab.configChanged.connect(self._on_delivery_config_changed)
         self.column_order_tab.configChanged.connect(self._on_column_order_config_changed)
@@ -532,6 +530,7 @@ class ParcelGeneratorApp(QMainWindow):
             "input_path": base_config.get("input_path"),
             "output_dir": base_config.get("output_dir"),
             "style": base_config.get("style"),
+            "estilo": base_config.get("style"),  # Compatibility with run_pipeline.py
             "use_csv": sampling_config.get("use_csv", False),
             "csv_path": sampling_config.get("csv_path"),
             "grouping_fields": base_config.get("grouping_fields"),
@@ -586,6 +585,8 @@ class ParcelGeneratorApp(QMainWindow):
         # NUEVO: Agregar configuración de entrega
         delivery_config = self.pipeline_config.get("DELIVERY_CONFIG", {})
         if delivery_config:
+            full_config["delivery_config"] = delivery_config
+            # Also set individual fields for backward compatibility
             full_config["delivery_code"] = delivery_config.get("delivery_code")
             full_config["date_today"] = delivery_config.get("date_today")
             full_config["delivery_metadata"] = delivery_config.get("metadata", {})

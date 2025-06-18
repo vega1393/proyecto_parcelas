@@ -3,10 +3,10 @@ GUI settings utilities for the Parcel Generator project.
 All configuration is stored in JSON format.
 """
 
-import os
 import json
-from typing import Any, Dict
 import logging
+import os
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 

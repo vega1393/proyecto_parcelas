@@ -1,6 +1,7 @@
-from typing import Optional
-import geopandas as gpd
 import logging
+from typing import Optional
+
+import geopandas as gpd
 
 logger = logging.getLogger(__name__)
 

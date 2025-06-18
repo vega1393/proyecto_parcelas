@@ -55,6 +55,12 @@ class DeliveryTab(QWidget):
         
         delivery_layout.addRow("Processing Date:", date_layout)
         
+        # Sufijo para ID de parcela
+        self.parcel_id_suffix_line = QLineEdit()
+        self.parcel_id_suffix_line.setPlaceholderText("e.g., v1, final, test")
+        self.parcel_id_suffix_line.setToolTip("Additional suffix for parcel IDs: tipouso_predio_###_delivery_SUFFIX")
+        delivery_layout.addRow("Parcel ID Suffix:", self.parcel_id_suffix_line)
+        
         form_layout.addWidget(delivery_group)
 
         # --- Configuración de Archivos ---
@@ -148,6 +154,7 @@ class DeliveryTab(QWidget):
         # Conectar todos los campos que afectan la configuración
         self.delivery_code_line.textChanged.connect(self._emit_config_changed)
         self.date_edit.dateChanged.connect(self._emit_config_changed)
+        self.parcel_id_suffix_line.textChanged.connect(self._emit_config_changed)
         self.base_prefix_line.textChanged.connect(self._emit_config_changed)
         self.custom_suffix_line.textChanged.connect(self._emit_config_changed)
         self.results_subdir_line.textChanged.connect(self._emit_config_changed)
@@ -160,6 +167,7 @@ class DeliveryTab(QWidget):
         # Conectar cambios para actualizar preview automáticamente
         self.delivery_code_line.textChanged.connect(self._update_preview)
         self.date_edit.dateChanged.connect(self._update_preview)
+        self.parcel_id_suffix_line.textChanged.connect(self._update_preview)
         self.base_prefix_line.textChanged.connect(self._update_preview)
         self.custom_suffix_line.textChanged.connect(self._update_preview)
 
@@ -217,6 +225,21 @@ class DeliveryTab(QWidget):
             for file_type, filename in examples.items():
                 preview_text += f"{file_type}:\n  {filename}\n\n"
             
+            # Agregar ejemplo de ID de parcela
+            delivery_code = self.delivery_code_line.text().strip()
+            parcel_suffix = self.parcel_id_suffix_line.text().strip()
+            
+            preview_text += "Parcel ID format example:\n"
+            if delivery_code and parcel_suffix:
+                preview_text += f"  EUUG_4622_001_{delivery_code}_{parcel_suffix}\n"
+            elif delivery_code:
+                preview_text += f"  EUUG_4622_001_{delivery_code}\n"
+            elif parcel_suffix:
+                preview_text += f"  EUUG_4622_001_NO_DELIVERY_{parcel_suffix}\n"
+            else:
+                preview_text += f"  EUUG_4622_001_NO_DELIVERY\n"
+            preview_text += "  (tipouso_predio_###_delivery_suffix)\n\n"
+            
             # Agregar estructura de directorios
             results_dir = self.results_subdir_line.text().strip() or "results"
             logs_dir = self.logs_subdir_line.text().strip() or "logs"
@@ -243,6 +266,7 @@ class DeliveryTab(QWidget):
         
         config = {
             "delivery_code": self.delivery_code_line.text().strip(),
+            "parcel_id_suffix": self.parcel_id_suffix_line.text().strip(),
             "date_today": date_obj.strftime("%Y%m%d"),
             "date_formatted": date_obj.strftime("%Y-%m-%d"),
             "base_prefix": self.base_prefix_line.text().strip(),
@@ -266,12 +290,14 @@ class DeliveryTab(QWidget):
         """Aplica una configuración al tab."""
         # Bloquear señales temporalmente
         self.delivery_code_line.blockSignals(True)
+        self.parcel_id_suffix_line.blockSignals(True)
         self.date_edit.blockSignals(True)
         self.base_prefix_line.blockSignals(True)
         self.custom_suffix_line.blockSignals(True)
         
         # Aplicar configuración básica
         self.delivery_code_line.setText(config.get("delivery_code", ""))
+        self.parcel_id_suffix_line.setText(config.get("parcel_id_suffix", ""))
         self.base_prefix_line.setText(config.get("base_prefix", ""))
         self.custom_suffix_line.setText(config.get("custom_suffix", ""))
         
@@ -298,6 +324,7 @@ class DeliveryTab(QWidget):
         
         # Restaurar señales
         self.delivery_code_line.blockSignals(False)
+        self.parcel_id_suffix_line.blockSignals(False)
         self.date_edit.blockSignals(False)
         self.base_prefix_line.blockSignals(False)
         self.custom_suffix_line.blockSignals(False)

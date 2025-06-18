@@ -1,8 +1,8 @@
 # ===================================================================
-# PARCEL GENERATOR ENHANCED v1.1 - REQUIREMENTS
+# PARCEL GENERATOR ENHANCED v1.2 - REQUIREMENTS
 # ===================================================================
-# Dependencias necesarias para ejecutar la aplicación de generación
-# de parcelas geoespaciales con soporte completo para geodatabases.
+# Dependencies for the geospatial parcel generation application
+# with full geodatabase support.
 # ===================================================================
 
 # ===== INTERFAZ GRÁFICA =====

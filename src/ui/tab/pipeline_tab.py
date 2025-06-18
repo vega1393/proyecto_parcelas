@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 
 # Reutilizaremos el diálogo de selección de campos del PO
 from src.ui.dialogs.po_fields_dialog import POFieldsDialog
+from src.ui.widgets_utils import create_spinbox, create_double_spinbox, create_style_combo
 from src.utils.gpkg_helpers import list_layers, list_fields
 from src.utils.dialog_utils import EnhancedFileDialog, create_geo_file_filter
 
@@ -63,8 +64,7 @@ class PipelineTab(QWidget):
         self.form_layout.addRow("Output Directory:", output_layout)
         
         # Style Selection
-        self.style_combo = QComboBox()
-        self.style_combo.addItems(["calibration", "control", "custom"])
+        self.style_combo = create_style_combo()
         self.form_layout.addRow("Processing Style:", self.style_combo)
         
         # --- Configuration Summary ---
@@ -126,14 +126,14 @@ class PipelineTab(QWidget):
         parcel_limits_layout = QFormLayout(self.parcel_limits_group)
         
         self.min_parcels_enabled_checkbox = QCheckBox("Enable minimum parcels limit")
-        self.min_parcels_value_spin = self._create_spinbox(1, 100, 1)
+        self.min_parcels_value_spin = create_spinbox(1, 100, 1)
         min_parcels_layout = QHBoxLayout()
         min_parcels_layout.addWidget(self.min_parcels_enabled_checkbox)
         min_parcels_layout.addWidget(self.min_parcels_value_spin)
         parcel_limits_layout.addRow("Minimum parcels:", min_parcels_layout)
         
         self.max_parcels_enabled_checkbox = QCheckBox("Enable maximum parcels limit")
-        self.max_parcels_value_spin = self._create_spinbox(1, 1000, 20)
+        self.max_parcels_value_spin = create_spinbox(1, 1000, 20)
         max_parcels_layout = QHBoxLayout()
         max_parcels_layout.addWidget(self.max_parcels_enabled_checkbox)
         max_parcels_layout.addWidget(self.max_parcels_value_spin)
@@ -146,17 +146,17 @@ class PipelineTab(QWidget):
         area_distance_layout = QFormLayout(self.area_distance_group)
         
         # EPSG/CRS Configuration
-        self.projected_crs_spin = self._create_spinbox(1000, 99999, 31982)
+        self.projected_crs_spin = create_spinbox(1000, 99999, 31982)
         self.projected_crs_spin.setToolTip("EPSG code for the projected coordinate system (e.g., 31982 for SIRGAS 2000 UTM Zone 18S)")
         area_distance_layout.addRow("Projected CRS (EPSG):", self.projected_crs_spin)
         
-        self.min_area_value_spin = self._create_double_spinbox(0.01, 1000.0, 0.3, 0.01)
+        self.min_area_value_spin = create_double_spinbox(0.01, 1000.0, 0.3, 0.01)
         area_distance_layout.addRow("Min area (ha):", self.min_area_value_spin)
         
-        self.buffer_value_spin = self._create_spinbox(-1000, 0, -20)
+        self.buffer_value_spin = create_spinbox(-1000, 0, -20)
         area_distance_layout.addRow("Buffer distance (m):", self.buffer_value_spin)
         
-        self.min_distance_value_spin = self._create_double_spinbox(0.0, 1000.0, 60.0, 0.1)
+        self.min_distance_value_spin = create_double_spinbox(0.0, 1000.0, 60.0, 0.1)
         area_distance_layout.addRow("Min distance between parcels (m):", self.min_distance_value_spin)
         
         config_summary_layout.addWidget(self.area_distance_group)
@@ -165,7 +165,7 @@ class PipelineTab(QWidget):
         self.parcel_id_group = QGroupBox("Parcel Identification")
         parcel_id_layout = QFormLayout(self.parcel_id_group)
         
-        self.id_parcela_inicio_value_spin = self._create_spinbox(0, 999999, 0)
+        self.id_parcela_inicio_value_spin = create_spinbox(0, 999999, 0)
         parcel_id_layout.addRow("Starting Parcel ID:", self.id_parcela_inicio_value_spin)
         
         self.version_parcela_value_line = QLineEdit()
@@ -205,18 +205,7 @@ class PipelineTab(QWidget):
         # Initialize style defaults
         self._load_style_defaults()
 
-    def _create_spinbox(self, min_val, max_val, default):
-        spinbox = QSpinBox()
-        spinbox.setRange(min_val, max_val)
-        spinbox.setValue(default)
-        return spinbox
-        
-    def _create_double_spinbox(self, min_val, max_val, default, step):
-        spinbox = QDoubleSpinBox()
-        spinbox.setRange(min_val, max_val)
-        spinbox.setSingleStep(step)
-        spinbox.setValue(default)
-        return spinbox
+    # Functions moved to src.ui.widgets_utils to avoid code duplication
 
     def _connect_signals(self) -> None:
         # File selection

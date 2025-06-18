@@ -125,7 +125,7 @@ def ejecutar_proceso(
                 gridcode_params
             )
             
-            # NUEVO: Guardar grilla con gridcode calculado (antes del dissolve)
+            # Save grid with calculated gridcode (before dissolve)
             if cfg["USE_GRIDCODE"] and 'gridcode' in gdf.columns:
                 logger.info(f"Guardando grilla con gridcode en: {rutas['gpkg_gridcode']}")
                 pyogrio.write_dataframe(gdf, rutas['gpkg_gridcode'], layer='grilla_gridcode')
@@ -420,10 +420,27 @@ def ejecutar_proceso(
             
         if 6 in op and poligonos_gdf is not None and not poligonos_gdf.empty:
             report_progress(85, "Asignando atributos PO...")
+            
+            # Determine delivery code and suffix from multiple sources (priority order)
+            delivery_info = {}
+            if delivery_config:
+                if delivery_config.get("delivery_code"):
+                    delivery_info['delivery_code'] = delivery_config.get("delivery_code")
+                    logger.info(f"Using delivery code from config: {delivery_info['delivery_code']}")
+                if delivery_config.get("parcel_id_suffix"):
+                    delivery_info['sufijo'] = delivery_config.get("parcel_id_suffix")
+                    logger.info(f"Using parcel ID suffix from config: {delivery_info['sufijo']}")
+            elif entrega:
+                delivery_info['delivery_code'] = entrega
+                logger.info(f"Using delivery code from entrega parameter: {entrega}")
+            
+            if not delivery_info:
+                logger.warning("No delivery code or suffix provided. Generated parcel IDs will use default format.")
+            
             poligonos_gdf_final = asignar_atributos_po(
                 parcelas_gdf=poligonos_gdf, po_config=cfg.get("PO_CONFIG", {}),
                 crs_target=cfg["PROJECTED_CRS"], output_path=rutas['gpkg_final'], # Guardar directamente el final
-                entrega=entrega
+                entrega=delivery_info if delivery_info else None
             )
             resultados['gdf_final'] = poligonos_gdf_final
         else:

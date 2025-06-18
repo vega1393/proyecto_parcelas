@@ -11,17 +11,19 @@ from src.io.lectura import leer_capa
 
 logger = logging.getLogger(__name__)
 
-def generar_id_fasa(parcels_gdf: gpd.GeoDataFrame, po_config: Dict[str, Any], entrega: Optional[str] = None) -> gpd.GeoDataFrame:
+def generar_id_fasa(parcels_gdf: gpd.GeoDataFrame, po_config: Dict[str, Any], entrega: Optional[str] = None, sufijo: Optional[str] = None) -> gpd.GeoDataFrame:
     """
     Genera IDs específicos de parcelas basados en la configuración del PO.
+    Implementa la lógica mejorada del script de formateo para manejo robusto de datos.
     
     Args:
         parcels_gdf: GeoDataFrame con las parcelas
         po_config: Configuración del Plan Operativo
         entrega: Código de entrega (opcional)
+        sufijo: Sufijo adicional para el ID de parcela (opcional)
         
     Returns:
-        GeoDataFrame con IDs de parcelas generados
+        GeoDataFrame con IDs de parcelas generados con formato: tipouso_predio_###_delivery_suffix
     """
     id_config = po_config.get("campos_id_fasa", {})
     predio_field = id_config.get('predio', 'predio').lower()
@@ -29,6 +31,11 @@ def generar_id_fasa(parcels_gdf: gpd.GeoDataFrame, po_config: Dict[str, Any], en
     
     logger.debug(f"Looking for ID fields: predio='{predio_field}', tipo='{tipo_field}'")
     logger.debug(f"Available columns: {list(parcels_gdf.columns)}")
+    
+    if not all([predio_field, tipo_field]):
+        logger.error("predio_field and tipo_field must be defined in campos_id_fasa configuration.")
+        parcels_gdf['id_parcel'] = parcels_gdf['id_parcela']
+        return parcels_gdf
     
     if predio_field in parcels_gdf.columns and tipo_field in parcels_gdf.columns:
         # Check if fields have actual values
@@ -38,24 +45,71 @@ def generar_id_fasa(parcels_gdf: gpd.GeoDataFrame, po_config: Dict[str, Any], en
         logger.debug(f"Field '{tipo_field}' has {tipo_values} non-null values")
         
         if predio_values > 0 and tipo_values > 0:
+            logger.info(f"Generating parcel ID using fields: '{predio_field}' and '{tipo_field}'")
+            
+            # MEJORA 1: Convertir predio a numérico y luego a Int64 para manejar decimales
+            # Si el valor es 123.0, se convierte a 123 (elimina el .0)
+            parcels_gdf[predio_field] = pd.to_numeric(parcels_gdf[predio_field], errors='coerce').astype('Int64')
+            
+            # MEJORA 2: Manejo robusto de valores nulos en tipo_field
+            parcels_gdf[tipo_field] = parcels_gdf[tipo_field].fillna('SINDATO')
+            
+            # MEJORA 3: Asignar 0 a predios nulos para ordenamiento consistente
+            parcels_gdf[predio_field] = parcels_gdf[predio_field].fillna(0)
+            
             # Sort for consistent numbering
-            parcels_gdf = parcels_gdf.sort_values(by=[predio_field, tipo_field, 'id_parcela'])
-            # Create sequential number within each property
+            parcels_gdf = parcels_gdf.sort_values(by=[predio_field, tipo_field])
+            
+            # Create sequential number within each property (using groupby on predio only)
             parcels_gdf['_temp_serial'] = parcels_gdf.groupby(predio_field).cumcount() + 1
             
-            parcels_gdf['id_parcel'] = (
+            # MEJORA 4: Formato robusto del ID con delivery code y sufijo adicional
+            # Construir base del ID: tipouso_predio_###
+            base_id = (
                 parcels_gdf[tipo_field].astype(str).str.strip() + '_' +
                 parcels_gdf[predio_field].astype(str).str.strip() + '_' +
-                parcels_gdf['_temp_serial'].astype(str).str.zfill(3) +
-                (f'_{entrega}' if entrega else '')
+                parcels_gdf['_temp_serial'].astype(str).str.zfill(3)
             )
+            
+            # Agregar delivery code y sufijo según disponibilidad
+            suffix_parts = []
+            if entrega:
+                suffix_parts.append(entrega)
+            if sufijo:
+                suffix_parts.append(sufijo)
+            
+            if suffix_parts:
+                parcels_gdf['id_parcel'] = base_id + '_' + '_'.join(suffix_parts)
+            else:
+                parcels_gdf['id_parcel'] = base_id
+            
+            # Clean up temporary column
             parcels_gdf = parcels_gdf.drop(columns=['_temp_serial'])
+            
+            # Generar descripción del formato
+            format_example = f"{tipo_field}_{predio_field}_###"
+            if entrega:
+                format_example += f"_{entrega}"
+            if sufijo:
+                format_example += f"_{sufijo}"
+            if not entrega and not sufijo:
+                format_example += "_NO_DELIVERY_NO_SUFFIX"
+                
+            logger.info(f"Generated {len(parcels_gdf)} parcel IDs with format: {format_example}")
             logger.debug("Final parcel IDs generated successfully")
+            
+            # Log some examples for verification
+            sample_ids = parcels_gdf['id_parcel'].head(3).tolist()
+            logger.debug(f"Sample generated IDs: {sample_ids}")
+            
         else:
             logger.warning(f"Fields exist but have no values: {predio_field}={predio_values}, {tipo_field}={tipo_values}")
+            logger.warning("Falling back to using original id_parcela as id_parcel")
             parcels_gdf['id_parcel'] = parcels_gdf['id_parcela']
     else:
         logger.warning(f"Could not generate final ID. Missing required fields: {predio_field}, {tipo_field}")
+        logger.warning(f"Available columns: {list(parcels_gdf.columns)}")
+        logger.warning("Falling back to using original id_parcela as id_parcel")
         parcels_gdf['id_parcel'] = parcels_gdf['id_parcela']
     
     return parcels_gdf
@@ -145,8 +199,30 @@ def asignar_atributos_po(parcelas_gdf: gpd.GeoDataFrame, po_config: Dict[str, An
 
     # Generate a more specific parcel ID if configured
     if po_config.get("generar_id_fasa", True):
-        logger.debug("Generating final parcel ID...")
-        parcels_with_po = generar_id_fasa(parcels_with_po, po_config, entrega)
+        logger.info("Generating enhanced parcel ID with delivery code and suffix...")
+        # Extract suffix from entrega parameter if it contains suffix info
+        sufijo = None
+        if isinstance(entrega, dict):
+            sufijo = entrega.get('sufijo')
+            entrega = entrega.get('delivery_code', entrega)
+        
+        parcels_with_po = generar_id_fasa(parcels_with_po, po_config, entrega, sufijo)
+        
+        # Validate ID generation results
+        if 'id_parcel' in parcels_with_po.columns:
+            unique_ids = parcels_with_po['id_parcel'].nunique()
+            total_parcels = len(parcels_with_po)
+            logger.info(f"Generated {unique_ids} unique parcel IDs for {total_parcels} parcels")
+            
+            if unique_ids != total_parcels:
+                logger.warning(f"ATTENTION: Generated IDs are not unique! {total_parcels - unique_ids} duplicates found.")
+                duplicates = parcels_with_po['id_parcel'].value_counts()
+                duplicates = duplicates[duplicates > 1]
+                logger.warning(f"Duplicate IDs: {duplicates.head().to_dict()}")
+        else:
+            logger.error("Failed to generate id_parcel column!")
+    else:
+        logger.info("Enhanced parcel ID generation disabled in PO configuration")
     
     # Save to file if output path provided
     if output_path:

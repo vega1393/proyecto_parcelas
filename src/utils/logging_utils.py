@@ -4,12 +4,12 @@ Logging utilities for the Parcel Generator project.
 Utilidades para configurar el sistema de logging.
 """
 
+import json
 import logging
 import os
 import sys
-import json
-from typing import Optional
 from multiprocessing import Queue, current_process
+from typing import Optional
 
 # Elimina basicConfig y debug fuera de setup_logging
 # Solo setup_logging debe configurar el logging

@@ -3,8 +3,8 @@ Configuración base para la generación de parcelas.
 Contiene parámetros comunes a todos los estilos.
 """
 
-from typing import Dict, Any, List, Callable, Optional, Union
 import os
+from typing import Dict, Any, List, Callable, Optional, Union
 
 
 def filtrar_apl(valor):
