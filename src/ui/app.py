@@ -10,7 +10,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QMessageBox, QTabWidget, QSplitter, QPushButton, QFileDialog,
-    QComboBox
+    QComboBox, QProgressBar
 )
 from PyQt6.QtCore import Qt, QProcess, QProcessEnvironment
 
@@ -70,6 +70,89 @@ class ParcelGeneratorApp(QMainWindow):
         tabs.addTab(self.column_order_tab, "Column Order")
         tabs.addTab(self.config_tab, "Configuration")
         
+        # --- CONTROLES PRINCIPALES DE EJECUCIÓN ---
+        # Crear una barra de herramientas prominente para los controles de ejecución
+        execution_toolbar = QWidget()
+        execution_layout = QHBoxLayout(execution_toolbar)
+        execution_layout.setContentsMargins(10, 8, 10, 8)
+        
+        # Botones de ejecución prominentes
+        self.main_run_btn = QPushButton("🚀 Run Pipeline")
+        self.main_run_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+                min-width: 140px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:pressed {
+                background-color: #1e7e34;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+                color: #dee2e6;
+            }
+        """)
+        
+        self.main_stop_btn = QPushButton("⏹️ Stop")
+        self.main_stop_btn.setEnabled(False)
+        self.main_stop_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+                min-width: 100px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+            QPushButton:pressed {
+                background-color: #bd2130;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+                color: #dee2e6;
+            }
+        """)
+        
+        # Barra de progreso principal
+        self.main_progress_bar = QProgressBar()
+        self.main_progress_bar.setVisible(False)
+        self.main_progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #007acc;
+                border-radius: 6px;
+                text-align: center;
+                font-weight: bold;
+                font-size: 12px;
+                height: 24px;
+            }
+            QProgressBar::chunk {
+                background-color: #28a745;
+                border-radius: 4px;
+            }
+        """)
+        
+        # Agregar widgets a la barra de herramientas
+        execution_layout.addWidget(self.main_run_btn)
+        execution_layout.addWidget(self.main_stop_btn)
+        execution_layout.addWidget(self.main_progress_bar, 1)  # Expandir para llenar espacio
+        execution_layout.addStretch()
+        
+        # Agregar la barra de herramientas al layout principal
+        main_layout.addWidget(execution_toolbar)
+        
         # Log widget
         log_widget = QWidget()
         log_layout = QVBoxLayout(log_widget)
@@ -92,9 +175,12 @@ class ParcelGeneratorApp(QMainWindow):
         main_layout.addWidget(splitter)
 
     def _connect_signals(self):
-        # Señales existentes
+        # Señales de los controles principales de ejecución
+        self.main_run_btn.clicked.connect(self._run_pipeline)
+        self.main_stop_btn.clicked.connect(self._stop_pipeline)
+        
+        # Señales existentes (mantener compatibilidad)
         self.pipeline_tab.runRequested.connect(self._run_pipeline)
-        self.pipeline_tab.stop_btn.clicked.connect(self._stop_pipeline)
         self.clear_log_btn.clicked.connect(self.log_text.clear)
         self.po_tab.configChanged.connect(self._on_po_config_changed)
         self.exclusion_tab.configChanged.connect(self._on_exclusions_changed)
@@ -207,7 +293,7 @@ class ParcelGeneratorApp(QMainWindow):
             return
         
         self.log_text.append(f"[INFO] Starting enhanced pipeline with config: {self._last_temp_config_path}")
-        self.pipeline_tab.set_running_state(is_running=True)
+        self._set_running_state(is_running=True)
         
         self.process = QProcess(self)
         self.process.setProgram(sys.executable)
@@ -226,6 +312,18 @@ class ParcelGeneratorApp(QMainWindow):
         self.process.finished.connect(self._on_process_finished)
         
         self.process.start()
+
+    def _set_running_state(self, is_running: bool):
+        """Actualiza el estado de los controles de ejecución."""
+        # Controles principales
+        self.main_run_btn.setEnabled(not is_running)
+        self.main_stop_btn.setEnabled(is_running)
+        self.main_progress_bar.setVisible(is_running)
+        if not is_running:
+            self.main_progress_bar.setValue(0)
+        
+        # Controles del pipeline tab (mantener compatibilidad)
+        self.pipeline_tab.set_running_state(is_running)
 
     def _stop_pipeline(self):
         if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
@@ -248,8 +346,10 @@ class ParcelGeneratorApp(QMainWindow):
                 msg = json.loads(line)
                 msg_type = msg.get("type", "").lower()
                 if msg_type == "progress":
-                    self.pipeline_tab.update_progress(msg.get("value", 0))
-                    self.log_text.append(f"[PROGRESS] {msg.get('value', 0)}% - {msg.get('status', '')}")
+                    progress_value = msg.get("value", 0)
+                    self.main_progress_bar.setValue(progress_value)
+                    self.pipeline_tab.update_progress(progress_value)
+                    self.log_text.append(f"[PROGRESS] {progress_value}% - {msg.get('status', '')}")
                 elif msg_type == "log":
                     level = msg.get('level', 'info').upper()
                     message = msg.get('message', '')
@@ -271,6 +371,7 @@ class ParcelGeneratorApp(QMainWindow):
                         # Mostrar todos los logs en modo DEBUG
                         self.log_text.append(f"[{level}] {message}")
                 elif msg_type == "success":
+                    self.main_progress_bar.setValue(100)
                     self.pipeline_tab.update_progress(100)
                     self.log_text.append(f"[SUCCESS] {msg.get('message', 'Process completed successfully.')}")
                     QMessageBox.information(self, "Success", msg.get("message", "Process completed successfully."))
@@ -298,7 +399,7 @@ class ParcelGeneratorApp(QMainWindow):
         exit_code = self.process.exitCode()
         exit_status = self.process.exitStatus()
         self.log_text.append(f"[INFO] Process finished. Exit code: {exit_code}, Status: {exit_status.name}")
-        self.pipeline_tab.set_running_state(is_running=False)
+        self._set_running_state(is_running=False)
         self.process = None
         
         # Show user-friendly error messages for common issues
@@ -533,9 +634,14 @@ class ParcelGeneratorApp(QMainWindow):
         full_settings["gridcode_column_csv"] = sampling_settings.get("gridcode_column_csv")
         full_settings["field_mappings"] = sampling_settings.get("field_mappings", [])
         
-        # Configuración de intensidad
+        # Configuración de intensidad (campos individuales para compatibilidad)
+        full_settings["base_intensity"] = sampling_settings.get("base_intensity", 12)
+        full_settings["use_specific_intensity"] = sampling_settings.get("use_specific_intensity", False)
+        full_settings["specific_intensities"] = sampling_settings.get("specific_intensities", {})
+        
+        # Configuración legacy
         full_settings["custom_params"] = {
-            "intensity": sampling_settings.get("base_intensity", 80)
+            "intensity": sampling_settings.get("base_intensity", 12)
         }
         
         save_gui_settings(full_settings)
@@ -556,14 +662,14 @@ class ParcelGeneratorApp(QMainWindow):
         # Configuración de muestreo (puede venir del nuevo formato o del legacy)
         sampling_config = settings.get("sampling_config", {})
         if not sampling_config:
-            # Formato legacy - migrar desde configuración antigua
+            # Formato legacy o campos individuales - migrar desde configuración antigua
             custom_params = settings.get("custom_params", {})
             sampling_config = {
                 "use_csv": settings.get("use_csv", False),
                 "csv_path": settings.get("csv_path"),
-                "base_intensity": custom_params.get("intensity", 80),
-                "use_specific_intensity": False,
-                "specific_intensities": {},
+                "base_intensity": settings.get("base_intensity", custom_params.get("intensity", 12)),
+                "use_specific_intensity": settings.get("use_specific_intensity", False),
+                "specific_intensities": settings.get("specific_intensities", {}),
                 "count_column_csv": settings.get("count_column_csv"),
                 "gridcode_column_csv": settings.get("gridcode_column_csv"),
                 "field_mappings": settings.get("field_mappings", [])

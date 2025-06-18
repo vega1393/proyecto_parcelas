@@ -66,19 +66,59 @@ class PipelineTab(QWidget):
         self.style_combo.addItems(["calibration", "control", "custom"])
         self.form_layout.addRow("Processing Style:", self.style_combo)
         
-        # --- Style Configuration Details ---
-        self.style_config_group = QGroupBox("Style Configuration Details")
-        style_config_layout = QVBoxLayout(self.style_config_group)
+        # --- Configuration Summary ---
+        self.config_summary_group = QGroupBox("Configuration Summary")
+        config_summary_layout = QVBoxLayout(self.config_summary_group)
         
-        # Información del estilo seleccionado
-        self.style_info_text = QTextEdit()
-        self.style_info_text.setMaximumHeight(120)
-        self.style_info_text.setReadOnly(True)
-        style_config_layout.addWidget(self.style_info_text)
+        # Botón para mostrar/ocultar resumen de configuración
+        self.show_config_summary_btn = QPushButton("📋 Show Complete Configuration Summary")
+        self.show_config_summary_btn.setCheckable(True)
+        self.show_config_summary_btn.setToolTip("Click to show/hide a complete summary of all current configuration settings")
+        self.show_config_summary_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0078d4;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #106ebe;
+            }
+            QPushButton:pressed {
+                background-color: #005a9e;
+            }
+            QPushButton:checked {
+                background-color: #005a9e;
+                border: 2px solid #007acc;
+            }
+        """)
+        config_summary_layout.addWidget(self.show_config_summary_btn)
         
-        # Controles específicos por estilo
-        style_params_group = QGroupBox("Style-Specific Parameters")
-        self.style_params_layout = QFormLayout(style_params_group)
+        # Área de texto para mostrar el resumen (inicialmente oculta)
+        self.config_summary_text = QTextEdit()
+        self.config_summary_text.setMaximumHeight(200)
+        self.config_summary_text.setReadOnly(True)
+        self.config_summary_text.setVisible(False)
+        self.config_summary_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 2px solid #007acc;
+                border-radius: 6px;
+                padding: 12px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 12px;
+                font-weight: bold;
+                selection-background-color: #264f78;
+                selection-color: #ffffff;
+            }
+        """)
+        config_summary_layout.addWidget(self.config_summary_text)
+        
+
         
         # Parcel Limits Configuration
         self.parcel_limits_group = QGroupBox("Parcel Count Limits")
@@ -98,7 +138,7 @@ class PipelineTab(QWidget):
         max_parcels_layout.addWidget(self.max_parcels_value_spin)
         parcel_limits_layout.addRow("Maximum parcels:", max_parcels_layout)
         
-        style_config_layout.addWidget(self.parcel_limits_group)
+        config_summary_layout.addWidget(self.parcel_limits_group)
         
         # Area and Distance Parameters
         self.area_distance_group = QGroupBox("Area and Distance Parameters")
@@ -118,7 +158,7 @@ class PipelineTab(QWidget):
         self.min_distance_value_spin = self._create_double_spinbox(0.0, 1000.0, 60.0, 0.1)
         area_distance_layout.addRow("Min distance between parcels (m):", self.min_distance_value_spin)
         
-        style_config_layout.addWidget(self.area_distance_group)
+        config_summary_layout.addWidget(self.area_distance_group)
         
         # Parcel Identification Parameters
         self.parcel_id_group = QGroupBox("Parcel Identification")
@@ -131,43 +171,38 @@ class PipelineTab(QWidget):
         self.version_parcela_value_line.setPlaceholderText("e.g., A, B, v1")
         parcel_id_layout.addRow("Parcel Version:", self.version_parcela_value_line)
         
-        style_config_layout.addWidget(self.parcel_id_group)
+        config_summary_layout.addWidget(self.parcel_id_group)
         
         # Button to reset to default style values
         self.reset_style_btn = QPushButton("Reset to Style Defaults")
         self.reset_style_btn.setToolTip("Reset all parameters to the default values for the selected style")
-        style_config_layout.addWidget(self.reset_style_btn)
+        config_summary_layout.addWidget(self.reset_style_btn)
+        main_vbox.addWidget(self.config_summary_group)
         
-        style_config_layout.addWidget(style_params_group)
-        main_vbox.addWidget(self.style_config_group)
+        # Nota informativa sobre controles de ejecución
+        info_label = QLabel("ℹ️ Use the main Run Pipeline button at the top of the application to execute the pipeline.")
+        info_label.setStyleSheet("""
+            QLabel {
+                background-color: #e3f2fd;
+                border: 1px solid #2196f3;
+                border-radius: 4px;
+                padding: 8px;
+                color: #1976d2;
+                font-size: 12px;
+            }
+        """)
+        info_label.setWordWrap(True)
+        main_vbox.addWidget(info_label)
         
-        # Separator
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFrameShadow(QFrame.Shadow.Sunken)
-        main_vbox.addWidget(line)
-        
-        # Run Controls
-        run_layout = QHBoxLayout()
-        self.run_btn = QPushButton("Run Pipeline")
-        self.stop_btn = QPushButton("Stop")
-        self.stop_btn.setEnabled(False)
-        
-        run_layout.addWidget(self.run_btn)
-        run_layout.addWidget(self.stop_btn)
-        run_layout.addStretch()
-        
-        main_vbox.addLayout(run_layout)
-        
-        # Progress Bar
+        # Progress Bar (mantener para compatibilidad)
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         main_vbox.addWidget(self.progress_bar)
         
         main_layout.addWidget(scroll)
         
-        # Initialize style info
-        self._on_style_changed(self.style_combo.currentText())
+        # Initialize style defaults
+        self._load_style_defaults()
 
     def _create_spinbox(self, min_val, max_val, default):
         spinbox = QSpinBox()
@@ -192,8 +227,8 @@ class PipelineTab(QWidget):
         self.style_combo.currentTextChanged.connect(self._on_style_changed)
         self.reset_style_btn.clicked.connect(self._reset_to_style_defaults)
         
-        # Run controls
-        self.run_btn.clicked.connect(self.runRequested.emit)
+        # Configuration summary
+        self.show_config_summary_btn.toggled.connect(self._toggle_config_summary)
         
         # Parameter changes
         self.input_line.textChanged.connect(self._on_parameter_changed)
@@ -247,7 +282,7 @@ class PipelineTab(QWidget):
         """Actualiza la visualización de los campos de agrupación seleccionados."""
         if self._grouping_fields:
             fields_text = ", ".join(self._grouping_fields)
-            self.group_fields_label.setText(f"Selected fields: {fields_text}")
+            self.group_fields_label.setText(fields_text)
         else:
             self.group_fields_label.setText("Using default fields from style config.")
 
@@ -262,33 +297,94 @@ class PipelineTab(QWidget):
             self.output_line.setText(dir_path)
 
     def _on_style_changed(self, style: str) -> None:
-        """Maneja el cambio de estilo y actualiza la información."""
+        """Maneja el cambio de estilo y carga la configuración por defecto."""
+        self._load_style_defaults()
+        self._on_parameter_changed()
+
+    def _load_style_defaults(self) -> None:
+        """Carga los valores por defecto del estilo seleccionado."""
         from src.config.config_base import get_config
         
         try:
+            style = self.style_combo.currentText()
             config = get_config(style)
-            self._update_style_info(style, config)
             self._load_style_configuration(config)
-            self._on_parameter_changed()
         except Exception as e:
-            self.style_info_text.setText(f"Error loading style configuration: {e}")
+            print(f"Error loading style configuration: {e}")
 
-    def _update_style_info(self, style: str, config: Dict[str, Any]) -> None:
-        """Actualiza la información del estilo seleccionado."""
-        info_text = f"""Style: {style.upper()}
+    def _toggle_config_summary(self, checked: bool) -> None:
+        """Muestra u oculta el resumen de configuración."""
+        self.config_summary_text.setVisible(checked)
+        if checked:
+            self.show_config_summary_btn.setText("📋 Hide Configuration Summary")
+            self._update_config_summary()
+        else:
+            self.show_config_summary_btn.setText("📋 Show Complete Configuration Summary")
 
-Configuration Summary:
-• EPSG: {config.get('PROJECTED_CRS', 'N/A')}
-• Min Area: {config.get('AREA_MINIMA_HA', 'N/A')} ha
-• Buffer: {config.get('BUFFER_DISTANCE', 'N/A')} m
-• Min Distance: {config.get('MIN_DISTANCE', 'N/A')} m
-• Fields: {', '.join(config.get('FIELDS', []))}
-• GridCode: {'Enabled' if config.get('USE_GRIDCODE') else 'Disabled'}
-
-Note: Sampling method (intensity/CSV) is configured in the 'Sampling Method' tab.
-GridCode and specific intensities can be configured independently above."""
-
-        self.style_info_text.setText(info_text)
+    def _update_config_summary(self) -> None:
+        """Actualiza el resumen completo de configuración."""
+        try:
+            # Obtener configuración actual
+            config = self.get_config()
+            cfg_overrides = config.get('cfg_overrides', {})
+            
+            # Construir resumen con HTML simplificado
+            summary_html = """
+            <div style="color: #00d4ff; font-size: 14px; font-weight: bold;">🔧 COMPLETE CONFIGURATION SUMMARY</div>
+            <div style="color: #666666;">═══════════════════════════════════════════════════</div>
+            <br>
+            
+            <div style="color: #ffb366; font-weight: bold;">📁 BASIC CONFIGURATION:</div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Input File: <span style="color: #90ee90; font-weight: bold;">{input_file}</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Output Directory: <span style="color: #90ee90; font-weight: bold;">{output_dir}</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Processing Style: <span style="color: #90ee90; font-weight: bold;">{style}</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Grouping Fields: <span style="color: #90ee90; font-weight: bold;">{grouping_fields}</span></div>
+            <br>
+            
+            <div style="color: #ffb366; font-weight: bold;">📐 AREA & DISTANCE PARAMETERS:</div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• EPSG Code: <span style="color: #90ee90; font-weight: bold;">{epsg}</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Min Area: <span style="color: #90ee90; font-weight: bold;">{min_area} ha</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Buffer Distance: <span style="color: #90ee90; font-weight: bold;">{buffer} m</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Min Distance between parcels: <span style="color: #90ee90; font-weight: bold;">{min_distance} m</span></div>
+            <br>
+            
+            <div style="color: #ffb366; font-weight: bold;">📊 PARCEL COUNT LIMITS:</div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Minimum parcels: {min_parcels_status}</div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Maximum parcels: {max_parcels_status}</div>
+            <br>
+            
+            <div style="color: #ffb366; font-weight: bold;">🏷️ PARCEL IDENTIFICATION:</div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Starting Parcel ID: <span style="color: #90ee90; font-weight: bold;">{start_id}</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Parcel Version: <span style="color: #90ee90; font-weight: bold;">{version}</span></div>
+            <br>
+            
+            <div style="color: #ffb366; font-weight: bold;">ℹ️ OTHER CONFIGURATIONS:</div>
+            <div style="color: #87ceeb; font-style: italic;">&nbsp;&nbsp;• Sampling Method: See 'Sampling Method' tab</div>
+            <div style="color: #87ceeb; font-style: italic;">&nbsp;&nbsp;• Plan Operativo: See 'Plan Operativo (PO)' tab</div>
+            <div style="color: #87ceeb; font-style: italic;">&nbsp;&nbsp;• GridCode: See 'GridCode' tab</div>
+            <div style="color: #87ceeb; font-style: italic;">&nbsp;&nbsp;• Exclusion Layers: See 'Exclusion Layers' tab</div>
+            <div style="color: #87ceeb; font-style: italic;">&nbsp;&nbsp;• Delivery Settings: See 'Delivery' tab</div>
+            <div style="color: #87ceeb; font-style: italic;">&nbsp;&nbsp;• Column Order: See 'Column Order' tab</div>
+            """.format(
+                input_file=os.path.basename(config.get('input_path', 'Not set')),
+                output_dir=os.path.basename(config.get('output_dir', 'Not set')),
+                style=config.get('style', 'Not set').upper(),
+                grouping_fields=', '.join(config.get('grouping_fields', [])) if config.get('grouping_fields', []) else 'Using style defaults',
+                epsg=cfg_overrides.get('PROJECTED_CRS', 'Not set'),
+                min_area=cfg_overrides.get('AREA_MINIMA_HA', 'Not set'),
+                buffer=cfg_overrides.get('BUFFER_DISTANCE', 'Not set'),
+                min_distance=cfg_overrides.get('MIN_DISTANCE', 'Not set'),
+                min_parcels_status=f'<span class="enabled">{cfg_overrides.get("MIN_PARCELAS", "Not set")} (ENABLED)</span>' if cfg_overrides.get('MIN_PARCELAS_HABILITADO', False) else '<span class="disabled">DISABLED</span>',
+                max_parcels_status=f'<span class="enabled">{cfg_overrides.get("MAX_PARCELAS", "Not set")} (ENABLED)</span>' if cfg_overrides.get('MAX_PARCELAS_HABILITADO', False) else '<span class="disabled">DISABLED</span>',
+                start_id=cfg_overrides.get('ID_PARCELA_INICIO', 'Not set'),
+                version=cfg_overrides.get('VERSION_PARCELA', '') if cfg_overrides.get('VERSION_PARCELA', '') else 'Not set'
+            )
+            
+            # Establecer el HTML
+            self.config_summary_text.setHtml(summary_html)
+            
+        except Exception as e:
+            self.config_summary_text.setText(f"Error generating configuration summary: {e}")
 
     def _load_style_configuration(self, config: Dict[str, Any]) -> None:
         """Carga la configuración del estilo en los controles."""
@@ -338,6 +434,10 @@ GridCode and specific intensities can be configured independently above."""
         """Emite la señal cuando algún parámetro cambia."""
         config = self.get_config()
         self.configChanged.emit(config)
+        
+        # Actualizar resumen si está visible
+        if self.config_summary_text.isVisible():
+            self._update_config_summary()
 
     def get_config(self) -> Dict[str, Any]:
         """Retorna la configuración actual del pipeline."""
@@ -402,13 +502,17 @@ GridCode and specific intensities can be configured independently above."""
             self.output_line.blockSignals(False)
             self.style_combo.blockSignals(False)
             
-            # Actualizar información del estilo
-            self._on_style_changed(self.style_combo.currentText())
+            # Solo cargar configuración del estilo si no hay cfg_overrides específicos
+            # Esto evita sobrescribir valores guardados con defaults del estilo
+            if not cfg_overrides:
+                self._load_style_defaults()
+            
+            # Actualizar resumen si está visible
+            if self.config_summary_text.isVisible():
+                self._update_config_summary()
 
     def set_running_state(self, is_running: bool):
-        """Actualiza el estado de los controles según si el pipeline está ejecutándose."""
-        self.run_btn.setEnabled(not is_running)
-        self.stop_btn.setEnabled(is_running)
+        """Actualiza el estado de la barra de progreso local."""
         self.progress_bar.setVisible(is_running)
         if not is_running:
             self.progress_bar.setValue(0)
