@@ -222,6 +222,9 @@ class POLandUseDialog(QDialog):
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
         
+        # Clean up thread
+        self._cleanup_thread()
+        
         if error_message:
             QMessageBox.critical(self, "Error Loading Data", 
                                f"Failed to load Plan Operativo data:\n{error_message}")
@@ -375,4 +378,22 @@ class POLandUseDialog(QDialog):
         self.selected_field = field
         self.selected_types = types
         
-        super().accept() 
+        super().accept()
+    
+    def _cleanup_thread(self):
+        """Clean up the background loading thread."""
+        if hasattr(self, 'loader_thread') and self.loader_thread is not None:
+            if self.loader_thread.isRunning():
+                self.loader_thread.quit()
+                self.loader_thread.wait(1000)  # Wait up to 1 second
+            self.loader_thread = None
+    
+    def closeEvent(self, event):
+        """Handle dialog close event."""
+        self._cleanup_thread()
+        super().closeEvent(event)
+    
+    def reject(self):
+        """Handle dialog rejection."""
+        self._cleanup_thread()
+        super().reject() 

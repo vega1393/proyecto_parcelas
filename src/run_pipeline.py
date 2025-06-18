@@ -4,6 +4,7 @@ import sys
 import json
 import os
 import traceback
+import shutil
 
 # No tener código ejecutable (prints, imports complejos) a nivel de módulo.
 # Solo definiciones de funciones y clases si las hubiera.
@@ -81,10 +82,35 @@ def main():
         # Limpiar archivo temporal de configuración si existe
         if os.path.exists(config_path) and config_path.startswith(os.path.join(os.path.dirname(__file__), "src", "json_config", "tmp")):
             try:
+                # Copiar archivo temporal al directorio de salida antes de eliminarlo
+                output_dir = config.get("output_dir")
+                if output_dir and os.path.exists(output_dir):
+                    # Crear directorio de configuraciones si no existe
+                    config_history_dir = os.path.join(output_dir, "config")
+                    os.makedirs(config_history_dir, exist_ok=True)
+                    
+                    # Generar nombre descriptivo para el archivo de configuración
+                    temp_filename = os.path.basename(config_path)
+                    delivery_config = config.get("delivery_config", {})
+                    date_str = delivery_config.get("date_today", "")
+                    delivery_code = delivery_config.get("delivery_code", "")
+                    
+                    if date_str and delivery_code:
+                        config_filename = f"{date_str}_{delivery_code.upper()}_pipeline_config_executed.json"
+                    else:
+                        config_filename = f"pipeline_config_executed_{temp_filename}"
+                    
+                    config_dest_path = os.path.join(config_history_dir, config_filename)
+                    
+                    # Copiar archivo temporal al directorio de salida
+                    shutil.copy2(config_path, config_dest_path)
+                    print(f"[INFO] Configuration saved to output directory: {config_dest_path}")
+                
+                # Ahora eliminar el archivo temporal
                 os.remove(config_path)
                 print(f"[INFO] Removed temporary config: {config_path}")
             except Exception as e:
-                print(f"[WARNING] Could not remove temporary config file: {e}")
+                print(f"[WARNING] Could not process temporary config file: {e}")
         
     except Exception as e:
         error_message = f"Error durante la ejecución del pipeline: {str(e)}"

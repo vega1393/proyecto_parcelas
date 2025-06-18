@@ -39,7 +39,7 @@ BASE_CONFIG = {
     "VERSION_PARCELA": "",
     "FIELDS": ["zc_pira", "tipo_uso", "tipouso"],
     "FILTROS_CAMPOS": {
-        "tipouso": ["PIRA", "EUNI", "EUGL", "EHNG", "EGRN"],
+        "tipouso": ["EUGR", "EUUG", "EUUR"],
         "apl": filtrar_apl
     },
     "CAPAS_EXCLUSION": [
@@ -84,6 +84,7 @@ def get_config(estilo: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[
     # Seleccionar configuración base según el estilo
     style_configs = {
         "calibration": CALIBRATION_CONFIG,
+        "calibracion": CALIBRATION_CONFIG,  # Alias en español
         "control": CONTROL_CONFIG,
         "custom": Ecustom_CONFIG
     }

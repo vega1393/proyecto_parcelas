@@ -13,11 +13,9 @@ CALIBRATION_CONFIG.update({
     "USE_INTENSIDAD_ESPECIFICA": True,
     "INTENSIDAD_POR_CAMPO": {
         "tipouso": {
-            "PIRA": 140,
-            "EUNI": 100,
-            "EUGL": 100,
-            "EHNG": 100,
-            "EGRN": 100
+            "EUGR": 140,
+            "EUUG": 100,
+            "EUUR": 100
         }
     },
     "MIN_PARCELAS": None,
@@ -50,7 +48,13 @@ Ecustom_CONFIG.update({
     # Parámetros principales
     "INTENSIDAD": 50,
     "USE_INTENSIDAD_ESPECIFICA": True,
-    "INTENSIDAD_POR_CAMPO": {},
+    "INTENSIDAD_POR_CAMPO": {
+        "tipouso": {
+            "EUGR": 50,
+            "EUUG": 50,
+            "EUUR": 50
+        }
+    },
     "MIN_PARCELAS": None,
     "MAX_PARCELAS": 10,
     "AREA_MINIMA_HA": 0.3,

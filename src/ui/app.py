@@ -288,9 +288,6 @@ class ParcelGeneratorApp(QMainWindow):
                 json.dump(full_config, tmp, indent=4)
                 self._last_temp_config_path = tmp.name
                 
-            # NUEVO: Guardar copia del JSON en el directorio de salida para historial
-            self._save_config_history(full_config)
-                
         except Exception as e:
             QMessageBox.critical(self, "Config Error", f"Failed to create temporary config file: {e}")
             return
@@ -338,7 +335,24 @@ class ParcelGeneratorApp(QMainWindow):
             )
             if reply == QMessageBox.StandardButton.Yes:
                 self.log_text.append("[INFO] Terminating process...")
-                self.process.kill()
+                
+                try:
+                    # Intentar terminación suave primero
+                    self.process.terminate()
+                    
+                    # Esperar hasta 3 segundos para terminación suave
+                    if not self.process.waitForFinished(3000):
+                        self.log_text.append("[INFO] Process did not terminate gracefully, forcing termination...")
+                        self.process.kill()
+                        self.process.waitForFinished(1000)
+                    
+                    self.log_text.append("[INFO] Process terminated successfully")
+                    
+                except Exception as e:
+                    self.log_text.append(f"[WARNING] Error during process termination: {e}")
+                    # Forzar limpieza del proceso
+                    self.process = None
+                    self._set_running_state(is_running=False)
 
     def _on_process_stdout(self):
         data = self.process.readAllStandardOutput().data().decode("utf-8", errors="replace")
@@ -402,8 +416,14 @@ class ParcelGeneratorApp(QMainWindow):
         exit_code = self.process.exitCode()
         exit_status = self.process.exitStatus()
         self.log_text.append(f"[INFO] Process finished. Exit code: {exit_code}, Status: {exit_status.name}")
+        
+        # Limpiar conexiones de señales antes de procesar
+        if self.process:
+            self.process.readyReadStandardOutput.disconnect()
+            self.process.readyReadStandardError.disconnect()
+            self.process.finished.disconnect()
+        
         self._set_running_state(is_running=False)
-        self.process = None
         
         # Show user-friendly error messages for common issues
         if exit_code != 0:
@@ -443,13 +463,60 @@ class ParcelGeneratorApp(QMainWindow):
                                    "• Mismatched data types or field names\n"
                                    "• Invalid configuration parameters")
         
+        # Manejar archivo temporal
         if self._last_temp_config_path and os.path.exists(self._last_temp_config_path):
             try:
+                # Copiar archivo temporal al directorio de salida antes de eliminarlo
+                pipeline_config = self._get_full_pipeline_config()
+                output_dir = pipeline_config.get("output_dir")
+                if output_dir and os.path.exists(output_dir):
+                    # Crear directorio de configuraciones si no existe
+                    config_history_dir = os.path.join(output_dir, "config")
+                    os.makedirs(config_history_dir, exist_ok=True)
+                    
+                    # Generar nombre descriptivo para el archivo de configuración
+                    temp_filename = os.path.basename(self._last_temp_config_path)
+                    delivery_config = self.pipeline_config.get("DELIVERY_CONFIG", {})
+                    date_str = delivery_config.get("date_today", "")
+                    delivery_code = delivery_config.get("delivery_code", "")
+                    
+                    if date_str and delivery_code:
+                        config_filename = f"{date_str}_{delivery_code.upper()}_pipeline_config_executed.json"
+                    else:
+                        config_filename = f"pipeline_config_executed_{temp_filename}"
+                    
+                    config_dest_path = os.path.join(config_history_dir, config_filename)
+                    
+                    # Copiar archivo temporal al directorio de salida
+                    import shutil
+                    shutil.copy2(self._last_temp_config_path, config_dest_path)
+                    self.log_text.append(f"[INFO] Configuration saved to output directory: {config_dest_path}")
+                
+                # Ahora eliminar el archivo temporal
                 os.remove(self._last_temp_config_path)
                 self.log_text.append(f"[INFO] Removed temporary config: {self._last_temp_config_path}")
                 self._last_temp_config_path = None
             except Exception as e:
-                self.log_text.append(f"[WARNING] Could not remove temp file: {e}")
+                self.log_text.append(f"[WARNING] Could not process temp file: {e}")
+        
+        # Limpiar proceso de forma robusta
+        if self.process:
+            try:
+                # Esperar a que el proceso termine completamente
+                if self.process.state() != QProcess.ProcessState.NotRunning:
+                    self.process.waitForFinished(1000)  # Esperar máximo 1 segundo
+                
+                # Cerrar canales de comunicación
+                self.process.closeReadChannel(QProcess.ProcessChannel.StandardOutput)
+                self.process.closeReadChannel(QProcess.ProcessChannel.StandardError)
+                
+                # Eliminar referencia al proceso
+                self.process.deleteLater()
+                self.process = None
+                
+            except Exception as e:
+                self.log_text.append(f"[DEBUG] Process cleanup warning: {e}")
+                self.process = None
 
     # --- SETTINGS & CONFIG MANAGEMENT ---
 
@@ -707,11 +774,38 @@ class ParcelGeneratorApp(QMainWindow):
         # Clean specific temp file
         if self._last_temp_config_path and os.path.exists(self._last_temp_config_path):
             try:
+                # Copiar archivo temporal al directorio de salida antes de eliminarlo
+                pipeline_config = self._get_full_pipeline_config()
+                output_dir = pipeline_config.get("output_dir")
+                if output_dir and os.path.exists(output_dir):
+                    # Crear directorio de configuraciones si no existe
+                    config_history_dir = os.path.join(output_dir, "config")
+                    os.makedirs(config_history_dir, exist_ok=True)
+                    
+                    # Generar nombre descriptivo para el archivo de configuración
+                    temp_filename = os.path.basename(self._last_temp_config_path)
+                    delivery_config = self.pipeline_config.get("DELIVERY_CONFIG", {})
+                    date_str = delivery_config.get("date_today", "")
+                    delivery_code = delivery_config.get("delivery_code", "")
+                    
+                    if date_str and delivery_code:
+                        config_filename = f"{date_str}_{delivery_code.upper()}_pipeline_config_cleanup.json"
+                    else:
+                        config_filename = f"pipeline_config_cleanup_{temp_filename}"
+                    
+                    config_dest_path = os.path.join(config_history_dir, config_filename)
+                    
+                    # Copiar archivo temporal al directorio de salida
+                    import shutil
+                    shutil.copy2(self._last_temp_config_path, config_dest_path)
+                    self.log_text.append(f"[INFO] Configuration saved during cleanup: {config_dest_path}")
+                
+                # Ahora eliminar el archivo temporal
                 os.remove(self._last_temp_config_path)
                 self.log_text.append(f"[INFO] Removed temporary config: {self._last_temp_config_path}")
                 self._last_temp_config_path = None
             except Exception as e:
-                self.log_text.append(f"[WARNING] Could not remove temp file: {e}")
+                self.log_text.append(f"[WARNING] Could not process temp file: {e}")
         
         # Clean up any orphaned temp files in json_config directory
         json_config_dir = os.path.join(os.path.dirname(__file__), "..", "json_config")
@@ -721,82 +815,71 @@ class ParcelGeneratorApp(QMainWindow):
                 temp_files = glob.glob(os.path.join(json_config_dir, "tmp*.json"))
                 for temp_file in temp_files:
                     try:
+                        # Intentar copiar archivos huérfanos también si hay un directorio de salida válido
+                        try:
+                            pipeline_config = self._get_full_pipeline_config()
+                            output_dir = pipeline_config.get("output_dir")
+                            if output_dir and os.path.exists(output_dir):
+                                config_history_dir = os.path.join(output_dir, "config")
+                                os.makedirs(config_history_dir, exist_ok=True)
+                                
+                                temp_filename = os.path.basename(temp_file)
+                                config_dest_path = os.path.join(config_history_dir, f"orphaned_{temp_filename}")
+                                
+                                import shutil
+                                shutil.copy2(temp_file, config_dest_path)
+                                self.log_text.append(f"[INFO] Orphaned config saved: {config_dest_path}")
+                        except Exception:
+                            pass  # Si no se puede copiar, solo eliminar
+                        
                         os.remove(temp_file)
                         self.log_text.append(f"[INFO] Cleaned up orphaned temp file: {os.path.basename(temp_file)}")
                     except Exception as e:
                         self.log_text.append(f"[WARNING] Could not remove orphaned temp file {temp_file}: {e}")
             except Exception as e:
                 self.log_text.append(f"[WARNING] Error during temp files cleanup: {e}")
-        
+
     def closeEvent(self, event):
         """Clean up resources before closing."""
-        if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
-            reply = QMessageBox.question(
-                self, 'Process Still Running', 
-                "A pipeline process is still running. Are you sure you want to close? The process will be terminated.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            if reply == QMessageBox.StandardButton.Yes:
-                self._stop_pipeline()
+        try:
+            if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
+                reply = QMessageBox.question(
+                    self, 'Process Still Running', 
+                    "A pipeline process is still running. Are you sure you want to close? The process will be terminated.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    # Terminación robusta del proceso
+                    try:
+                        if self.process:
+                            self.process.terminate()
+                            if not self.process.waitForFinished(2000):
+                                self.process.kill()
+                                self.process.waitForFinished(1000)
+                    except Exception as e:
+                        self.log_text.append(f"[DEBUG] Process termination during close: {e}")
+                    
+                    self._cleanup_temp_files()
+                    self._save_gui_settings()
+                    event.accept()
+                else:
+                    event.ignore()
+                    return
+            else:
                 self._cleanup_temp_files()
                 self._save_gui_settings()
                 event.accept()
-            else:
-                event.ignore()
-        else:
-            self._cleanup_temp_files()
-            self._save_gui_settings()
-            event.accept()
-
-    def _save_config_history(self, config: Dict[str, Any]) -> None:
-        """Guarda una copia del JSON de configuración en el directorio de salida para historial."""
-        try:
-            output_dir = config.get("output_dir")
-            if not output_dir:
-                return
-                
-            # Crear directorio de configuraciones si no existe
-            config_history_dir = os.path.join(output_dir, "config")
-            os.makedirs(config_history_dir, exist_ok=True)
             
-            # Generar nombre del archivo de configuración usando la nomenclatura de delivery
-            delivery_config = self.pipeline_config.get("DELIVERY_CONFIG", {})
-            date_str = delivery_config.get("date_today", "20250617")
-            delivery_code = delivery_config.get("delivery_code", "d01")
-            base_prefix = delivery_config.get("base_prefix", "")
-            custom_suffix = delivery_config.get("custom_suffix", "")
-            
-            # Construir nombre base
-            name_parts = []
-            if base_prefix:
-                name_parts.append(base_prefix)
-            if delivery_code:
-                name_parts.append(delivery_code.upper())
-            
-            base_name = "_".join(name_parts) if name_parts else "CONFIG"
-            if custom_suffix:
-                base_name += custom_suffix
-                
-            config_filename = f"{date_str}_{base_name}_pipeline_config.json"
-            config_path = os.path.join(config_history_dir, config_filename)
-            
-            # Agregar metadatos adicionales al JSON de historial
-            config_with_metadata = config.copy()
-            config_with_metadata["_metadata"] = {
-                "generated_at": datetime.now().isoformat(),
-                "generated_by": "Parcel Generator Enhanced GUI",
-                "version": "1.0",
-                "description": "Configuration used for parcel generation pipeline execution",
-                "delivery_info": delivery_config
-            }
-            
-            # Guardar archivo de configuración
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config_with_metadata, f, indent=4, ensure_ascii=False)
-                
-            self.log_text.append(f"[INFO] Configuration saved to history: {config_path}")
-            
+            # Limpieza final de recursos
+            if self.process:
+                try:
+                    self.process.deleteLater()
+                    self.process = None
+                except Exception:
+                    pass
+                    
         except Exception as e:
-            self.log_text.append(f"[WARNING] Could not save configuration history: {e}")
-            # No fallar el pipeline si no se puede guardar el historial
+            # En caso de error, aceptar el cierre de todas formas
+            self.log_text.append(f"[DEBUG] Error during application close: {e}")
+            event.accept()
