@@ -117,7 +117,13 @@ def ejecutar_proceso(
     if 1 in op:
         report_progress(20, "Calculando gridcode...")
         # Asegurarse que el nombre de la columna de gridcode también esté en minúsculas si se crea
-        gdf = calcular_gridcode(gdf, cfg["USE_GRIDCODE"], {k: v.lower() for k, v in cfg["CAMPOS_METRICAS"].items()})
+        gridcode_params = cfg.get("GRIDCODE_PARAMS")
+        gdf = calcular_gridcode(
+            gdf, 
+            cfg["USE_GRIDCODE"], 
+            {k: v.lower() for k, v in cfg["CAMPOS_METRICAS"].items()},
+            gridcode_params
+        )
         
         # NUEVO: Guardar grilla con gridcode calculado (antes del dissolve)
         if cfg["USE_GRIDCODE"] and 'gridcode' in gdf.columns:
