@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Optional
 
 # Se asume que este helper existe y funciona
 from src.utils.gpkg_helpers import list_layers
+from src.utils.dialog_utils import EnhancedFileDialog, create_geo_file_filter
 
 class ExclusionTab(QWidget):
     """
@@ -53,8 +54,8 @@ class ExclusionTab(QWidget):
 
     def _add_exclusion(self) -> None:
         """Guides the user through adding a new exclusion layer."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Exclusion File", "", "Geo Files (*.shp *.gpkg *.geojson *.gdb);;All Files (*)"
+        file_path, _ = EnhancedFileDialog.get_open_file_name(
+            self, "Select Exclusion File", "", create_geo_file_filter()
         )
         if not file_path:
             return

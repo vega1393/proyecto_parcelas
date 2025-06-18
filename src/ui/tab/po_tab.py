@@ -9,6 +9,7 @@ from PyQt6.QtCore import pyqtSignal
 from typing import Dict, List, Any
 
 from src.utils.gpkg_helpers import list_layers, list_fields
+from src.utils.dialog_utils import EnhancedFileDialog, create_geo_file_filter
 from src.ui.dialogs.po_fields_dialog import POFieldsDialog
 
 class POTab(QWidget):
@@ -68,10 +69,13 @@ class POTab(QWidget):
         self.id_predio_line.textChanged.connect(lambda: self.configChanged.emit(self.get_config()))
         self.id_tipo_uso_line.textChanged.connect(lambda: self.configChanged.emit(self.get_config()))
 
-    # ... (métodos _select_po_file, _on_path_changed, _on_layer_changed, _select_po_fields sin cambios)...
     def _select_po_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Select PO File", "", "Geo Files (*.shp *.gpkg *.geojson *.gdb)")
-        if path: self.po_path_line.setText(path)
+        path, _ = EnhancedFileDialog.get_open_file_name(
+            self, "Select PO File", "", create_geo_file_filter()
+        )
+        if path:
+            self.po_path_line.setText(path)
+            self._on_path_changed(path)
 
     def _on_path_changed(self, path: str):
         self.po_layer_combo.clear(); self._selected_fields = []; self.po_fields_label.setText("No fields selected.")

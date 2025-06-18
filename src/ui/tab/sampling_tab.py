@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont
+from src.utils.dialog_utils import EnhancedFileDialog, create_csv_file_filter
 
 
 class SamplingTab(QWidget):
@@ -523,9 +524,9 @@ class SamplingTab(QWidget):
 
     def _browse_csv_file(self) -> None:
         """Abre diálogo para seleccionar archivo CSV."""
-        file_path, _ = QFileDialog.getOpenFileName(
+        file_path, _ = EnhancedFileDialog.get_open_file_name(
             self, "Select CSV File", 
-            "", "CSV Files (*.csv);;All Files (*)"
+            "", create_csv_file_filter()
         )
         
         if file_path:

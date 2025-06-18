@@ -8,9 +8,10 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QPushButton, 
     QComboBox, QSpinBox, QDoubleSpinBox, QLabel, QScrollArea, QFrame,
     QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
-    QCheckBox, QFileDialog
+    QCheckBox, QFileDialog, QTextEdit
 )
 from PyQt6.QtCore import pyqtSignal, Qt
+from src.utils.dialog_utils import EnhancedFileDialog
 
 class GridCodeTab(QWidget):
     """
@@ -274,7 +275,7 @@ class GridCodeTab(QWidget):
             QMessageBox.warning(self, "Export Warning", "GridCode is not enabled. Enable it first.")
             return
             
-        file_path, _ = QFileDialog.getSaveFileName(
+        file_path, _ = EnhancedFileDialog.get_save_file_name(
             self, "Export GridCode Config", 
             "gridcode_config.json", 
             "JSON Files (*.json);;All Files (*)"
@@ -290,7 +291,7 @@ class GridCodeTab(QWidget):
 
     def _import_config(self) -> None:
         """Importa la configuración de GridCode desde un archivo JSON."""
-        file_path, _ = QFileDialog.getOpenFileName(
+        file_path, _ = EnhancedFileDialog.get_open_file_name(
             self, "Import GridCode Config", 
             "", "JSON Files (*.json);;All Files (*)"
         )

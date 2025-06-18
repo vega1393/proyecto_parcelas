@@ -5,14 +5,15 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, QComboBox, 
     QSpinBox, QDoubleSpinBox, QHBoxLayout, QProgressBar, QFileDialog, 
     QScrollArea, QLabel, QCheckBox, QFrame, QMessageBox, QDialog,
-    QGroupBox, QTextEdit
+    QGroupBox, QTextEdit, QSizePolicy
 )
-from PyQt6.QtCore import pyqtSignal, Qt
-from typing import Dict, Any, List
+from PyQt6.QtCore import pyqtSignal, Qt, QTimer
+from typing import Dict, Any, List, Optional
 
 # Reutilizaremos el diálogo de selección de campos del PO
 from src.ui.dialogs.po_fields_dialog import POFieldsDialog
 from src.utils.gpkg_helpers import list_layers, list_fields
+from src.utils.dialog_utils import EnhancedFileDialog, create_geo_file_filter
 
 class PipelineTab(QWidget):
     runRequested = pyqtSignal()
@@ -219,8 +220,8 @@ class PipelineTab(QWidget):
 
     def _connect_signals(self) -> None:
         # File selection
-        self.input_browse_btn.clicked.connect(self._select_input_file)
-        self.output_browse_btn.clicked.connect(self._select_output_dir)
+        self.input_browse_btn.clicked.connect(self._browse_input_file)
+        self.output_browse_btn.clicked.connect(self._browse_output_dir)
         self.select_group_fields_btn.clicked.connect(self._select_grouping_fields)
         
         # Style changes
@@ -286,13 +287,17 @@ class PipelineTab(QWidget):
         else:
             self.group_fields_label.setText("Using default fields from style config.")
 
-    def _select_input_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select Input File", "", "GeoPackage (*.gpkg);;Shapefile (*.shp);;All Files (*)")
+    def _browse_input_file(self):
+        """Opens a file dialog to select the input file."""
+        file_path, _ = EnhancedFileDialog.get_open_file_name(
+            self, "Select Input File", "", create_geo_file_filter()
+        )
         if file_path:
             self.input_line.setText(file_path)
 
-    def _select_output_dir(self):
-        dir_path = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+    def _browse_output_dir(self):
+        """Opens a directory dialog to select the output directory."""
+        dir_path = EnhancedFileDialog.get_existing_directory(self, "Select Output Directory")
         if dir_path:
             self.output_line.setText(dir_path)
 

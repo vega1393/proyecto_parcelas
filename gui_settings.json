@@ -103,7 +103,7 @@
             "description": "Generaci\u00f3n de parcelas Brasil 2025 - Entrega E02 v1",
             "version": "v01",
             "operator": "vegatest",
-            "timestamp": "2025-06-18T12:56:36.736377"
+            "timestamp": "2025-06-18T13:17:32.907232"
         }
     },
     "column_order_config": {
@@ -111,24 +111,7 @@
         "output_path": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test03/results/20250617_E02_PARCELAS_FINALES_ordenada.gpkg",
         "create_backup": false,
         "geometry_first": false,
-        "column_order": [
-            "geom",
-            "gridcode",
-            "group_id",
-            "id_parcela",
-            "area_m2",
-            "punto_x",
-            "punto_y",
-            "index",
-            "predio",
-            "rodal",
-            "anoplantac",
-            "talhao",
-            "mesplantac",
-            "tipouso",
-            "tipomateri",
-            "id_parcela_final"
-        ]
+        "column_order": []
     },
     "sampling_config": {
         "use_csv": true,

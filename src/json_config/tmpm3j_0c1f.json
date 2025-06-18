@@ -25,17 +25,9 @@
         "USE_INTENSIDAD_ESPECIFICA": false,
         "INTENSIDAD_POR_CAMPO": {},
         "PO_CONFIG": {
-            "ruta": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/01_po/01_po_from_arauco/po_brasil_2025_v04_usoabril.gpkg",
-            "capa": "uso_suelo",
-            "campos": [
-                "predio",
-                "rodal",
-                "anoplantac",
-                "talhao",
-                "mesplantac",
-                "tipouso",
-                "tipomateri"
-            ],
+            "ruta": "C:/TRABAJO/06_proyectos/07_fasa2025/04_po_operativo/uso_suelo_from_arauco/UsoActual_Marzo_2025.gdb",
+            "capa": "Uso_de_Suelo_Marzo",
+            "campos": [],
             "campos_id_fasa": {
                 "predio": "predio",
                 "tipo": "tipouso"
@@ -110,6 +102,6 @@
         "description": "Generaci\u00f3n de parcelas Brasil 2025 - Entrega E02 v1",
         "version": "v01",
         "operator": "vegatest",
-        "timestamp": "2025-06-18T12:58:32.674389"
+        "timestamp": "2025-06-18T13:17:52.148209"
     }
 }

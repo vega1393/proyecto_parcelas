@@ -5,15 +5,18 @@ Tab for reordering columns in output files.
 
 import os
 from typing import Dict, Any, List, Optional
+import json
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, 
     QLineEdit, QPushButton, QLabel, QScrollArea, QGroupBox,
     QListWidget, QListWidgetItem, QMessageBox, QFileDialog,
-    QTextEdit, QComboBox, QCheckBox, QSplitter, QSizePolicy
+    QTextEdit, QComboBox, QCheckBox, QSplitter, QSizePolicy,
+    QSpinBox, QDoubleSpinBox, QFrame, QTableWidget, QTableWidgetItem, QHeaderView
 )
-from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+from PyQt6.QtCore import pyqtSignal, Qt, QMimeData
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont
+from src.utils.dialog_utils import EnhancedFileDialog
 
 try:
     import geopandas as gpd
@@ -401,9 +404,9 @@ class ColumnOrderTab(QWidget):
 
     def _browse_file(self) -> None:
         """Abre diálogo para seleccionar archivo."""
-        file_path, _ = QFileDialog.getOpenFileName(
+        file_path, _ = EnhancedFileDialog.get_open_file_name(
             self, "Select Geospatial File",
-            "", "Geospatial Files (*.gpkg *.shp);;GPKG Files (*.gpkg);;Shapefile (*.shp);;All Files (*)"
+            "", "Geospatial Files (*.gpkg *.shp *.gdb);;GPKG Files (*.gpkg);;Shapefile (*.shp);;Geodatabase (*.gdb);;All Files (*)"
         )
         if file_path:
             self.file_path_line.setText(file_path)
@@ -411,7 +414,7 @@ class ColumnOrderTab(QWidget):
 
     def _browse_output(self) -> None:
         """Abre diálogo para seleccionar archivo de salida."""
-        file_path, _ = QFileDialog.getSaveFileName(
+        file_path, _ = EnhancedFileDialog.get_save_file_name(
             self, "Save Reordered File As",
             "", "Geospatial Files (*.gpkg *.shp);;GPKG Files (*.gpkg);;Shapefile (*.shp);;All Files (*)"
         )

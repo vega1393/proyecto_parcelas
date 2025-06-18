@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import tempfile
+import shutil
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
@@ -24,6 +25,7 @@ from src.ui.tab.gridcode_tab import GridCodeTab
 from src.ui.tab.delivery_tab import DeliveryTab
 from src.ui.tab.column_order_tab import ColumnOrderTab
 from src.ui.tab.help_tab import HelpTab
+from src.utils.dialog_utils import EnhancedFileDialog
 
 class ParcelGeneratorApp(QMainWindow):
     def __init__(self) -> None:
@@ -592,7 +594,7 @@ class ParcelGeneratorApp(QMainWindow):
 
     def _export_config(self):
         config_to_export = self._get_full_pipeline_config()
-        file_path, _ = QFileDialog.getSaveFileName(
+        file_path, _ = EnhancedFileDialog.get_save_file_name(
             self, "Export Pipeline Config", 
             "", "JSON Files (*.json);;All Files (*)"
         )
@@ -610,7 +612,7 @@ class ParcelGeneratorApp(QMainWindow):
             QMessageBox.critical(self, "Export Error", f"Could not save the configuration file.\n\nError: {e}")
     
     def _import_config(self):
-        file_path, _ = QFileDialog.getOpenFileName(
+        file_path, _ = EnhancedFileDialog.get_open_file_name(
             self, "Import Pipeline Config", 
             "", "JSON Files (*.json);;All Files (*)"
         )
