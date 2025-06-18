@@ -23,6 +23,7 @@ from src.ui.tab.config_tab import ConfigTab
 from src.ui.tab.gridcode_tab import GridCodeTab
 from src.ui.tab.delivery_tab import DeliveryTab
 from src.ui.tab.column_order_tab import ColumnOrderTab
+from src.ui.tab.help_tab import HelpTab
 
 class ParcelGeneratorApp(QMainWindow):
     def __init__(self) -> None:
@@ -59,6 +60,7 @@ class ParcelGeneratorApp(QMainWindow):
         self.gridcode_tab = GridCodeTab()
         self.delivery_tab = DeliveryTab()
         self.column_order_tab = ColumnOrderTab()
+        self.help_tab = HelpTab()
         
         # Agregar tabs en orden lógico
         tabs.addTab(self.pipeline_tab, "Pipeline")
@@ -69,6 +71,7 @@ class ParcelGeneratorApp(QMainWindow):
         tabs.addTab(self.delivery_tab, "Delivery")
         tabs.addTab(self.column_order_tab, "Column Order")
         tabs.addTab(self.config_tab, "Configuration")
+        tabs.addTab(self.help_tab, "Help")
         
         # --- CONTROLES PRINCIPALES DE EJECUCIÓN ---
         # Crear una barra de herramientas prominente para los controles de ejecución

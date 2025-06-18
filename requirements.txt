@@ -6,3 +6,4 @@ pandas>=1.5.0
 numpy>=1.22.0
 matplotlib>=3.5.0
 fiona>=1.8.20  # Para listar capas de geodatabases
+markdown>=3.4.0  # Para el tab de ayuda
