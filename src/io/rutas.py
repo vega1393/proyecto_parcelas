@@ -92,6 +92,7 @@ def configurar_rutas(
         'csv_analisis': os.path.join(full_summary_dir, f"{date_str}_{base_name}_analisis_perdidas_parcelas.csv"),
         
         # Results - Archivos intermedios
+        'gpkg_gridcode': os.path.join(full_results_dir, f"{date_str}_{base_name}_00_grilla_con_gridcode.gpkg"),
         'gpkg_inicial': os.path.join(full_results_dir, f"{date_str}_{base_name}_01_areas_agrupadas_inicial.gpkg"),
         'gpkg_areas': os.path.join(full_results_dir, f"{date_str}_{base_name}_02_areas_filtradas_buffer.gpkg"),
         'gpkg_exclusion': os.path.join(full_results_dir, f"{date_str}_{base_name}_04_areas_post_exclusion.gpkg"),

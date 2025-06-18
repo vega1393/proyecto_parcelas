@@ -229,6 +229,14 @@ class PipelineTab(QWidget):
         count_layout.addWidget(self.refresh_csv_fields_btn)
         csv_layout.addRow("Count Column (CSV):", count_layout)
         
+        # GridCode Column Selection - NUEVO
+        gridcode_layout = QHBoxLayout()
+        self.gridcode_column_combo = QComboBox()
+        self.gridcode_column_combo.setToolTip("Select the column in CSV that contains gridcode values (e.g., 'gridcode', 'sup_ha')")
+        self.gridcode_column_combo.addItem("(Auto-detect 'gridcode')", "")
+        gridcode_layout.addWidget(self.gridcode_column_combo)
+        csv_layout.addRow("GridCode Column (CSV):", gridcode_layout)
+        
         # Field Mapping Table
         mapping_label = QLabel("Field Mapping (GDF ↔ CSV):")
         mapping_label.setToolTip("Map fields between the input GDF and CSV for grouping")
@@ -264,6 +272,27 @@ class PipelineTab(QWidget):
         self.csv_preview_text.setReadOnly(True)
         self.csv_preview_text.setPlaceholderText("CSV preview will appear here...")
         csv_layout.addRow(self.csv_preview_text)
+        
+        # NUEVO: CSV Statistics
+        stats_label = QLabel("CSV Statistics:")
+        csv_layout.addRow(stats_label)
+        
+        self.csv_stats_text = QTextEdit()
+        self.csv_stats_text.setMaximumHeight(70)
+        self.csv_stats_text.setReadOnly(True)
+        self.csv_stats_text.setPlaceholderText("CSV statistics will appear here after selecting count column...")
+        self.csv_stats_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #e8f5e8;
+                border: 2px solid #28a745;
+                border-radius: 5px;
+                padding: 5px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 9pt;
+                color: #155724;
+            }
+        """)
+        csv_layout.addRow(self.csv_stats_text)
         
         main_vbox.addWidget(csv_group)
         
@@ -327,9 +356,8 @@ class PipelineTab(QWidget):
         self.remove_mapping_btn.clicked.connect(self._remove_selected_mapping)
         self.auto_detect_mapping_btn.clicked.connect(self._auto_detect_field_mapping)
         self.csv_path_line.textChanged.connect(self._on_csv_path_changed)
-        self.count_column_combo.currentTextChanged.connect(
-            lambda: self.configChanged.emit(self.get_config()) if hasattr(self, 'configChanged') else None
-        )
+        self.count_column_combo.currentTextChanged.connect(self._on_count_column_changed)
+        self.gridcode_column_combo.currentTextChanged.connect(self._on_gridcode_column_changed)
         
         # Style signals
         self.reset_style_btn.clicked.connect(self._reset_to_style_defaults)
@@ -419,15 +447,33 @@ class PipelineTab(QWidget):
         if os.path.exists(self.csv_path_line.text().strip()):
             self._refresh_csv_fields()
             self._update_csv_preview()
+            self._update_csv_statistics()
         else:
             self.count_column_combo.clear()
+            self.gridcode_column_combo.clear()
+            self.gridcode_column_combo.addItem("(Auto-detect 'gridcode')", "")
             self.csv_preview_text.clear()
+            self.csv_stats_text.clear()
+    
+    def _on_count_column_changed(self):
+        """Se ejecuta cuando cambia la columna de conteo seleccionada."""
+        self._update_csv_statistics()
+        if hasattr(self, 'configChanged'):
+            self.configChanged.emit(self.get_config())
+    
+    def _on_gridcode_column_changed(self):
+        """Se ejecuta cuando cambia la columna de gridcode seleccionada."""
+        self._update_csv_statistics()
+        if hasattr(self, 'configChanged'):
+            self.configChanged.emit(self.get_config())
 
     def _refresh_csv_fields(self):
         """Actualiza la lista de campos disponibles en el CSV."""
         csv_path = self.csv_path_line.text().strip()
         if not csv_path or not os.path.exists(csv_path):
             self.count_column_combo.clear()
+            self.gridcode_column_combo.clear()
+            self.gridcode_column_combo.addItem("(Auto-detect 'gridcode')", "")
             return
             
         try:
@@ -449,10 +495,37 @@ class PipelineTab(QWidget):
                     if candidate in df.columns:
                         self.count_column_combo.setCurrentText(candidate)
                         break
+            
+            # NUEVO: Actualizar combo de columna de gridcode
+            current_gridcode = self.gridcode_column_combo.currentData()
+            self.gridcode_column_combo.clear()
+            self.gridcode_column_combo.addItem("(Auto-detect 'gridcode')", "")
+            
+            # Agregar todas las columnas como opciones para gridcode
+            for col in df.columns:
+                self.gridcode_column_combo.addItem(col, col)
+            
+            # Tratar de restaurar selección o autodetectar
+            if current_gridcode and current_gridcode in df.columns:
+                index = self.gridcode_column_combo.findData(current_gridcode)
+                if index >= 0:
+                    self.gridcode_column_combo.setCurrentIndex(index)
+            else:
+                # Autodetectar columna de gridcode
+                gridcode_candidates = ['gridcode', 'grid_code', 'sup_ha', 'code', 'stratum']
+                for candidate in gridcode_candidates:
+                    if candidate in df.columns:
+                        index = self.gridcode_column_combo.findData(candidate)
+                        if index >= 0:
+                            self.gridcode_column_combo.setCurrentIndex(index)
+                            break
                         
         except Exception as e:
             QMessageBox.warning(self, "CSV Error", f"Could not read CSV file:\n{e}")
             self.count_column_combo.clear()
+            self.gridcode_column_combo.clear()
+            self.gridcode_column_combo.addItem("(Auto-detect 'gridcode')", "")
+            self.csv_stats_text.clear()
 
     def _update_csv_preview(self):
         """Actualiza el preview del CSV."""
@@ -475,6 +548,61 @@ class PipelineTab(QWidget):
             
         except Exception as e:
             self.csv_preview_text.setPlainText(f"Error reading CSV: {e}")
+    
+    def _update_csv_statistics(self):
+        """Actualiza las estadísticas del CSV basándose en la columna de conteo seleccionada."""
+        csv_path = self.csv_path_line.text().strip()
+        count_column = self.count_column_combo.currentText()
+        
+        if not csv_path or not os.path.exists(csv_path) or not count_column:
+            self.csv_stats_text.setPlainText("Select a valid CSV file and count column to see statistics.")
+            return
+            
+        try:
+            df = pd.read_csv(csv_path)
+            df.columns = [str(col).lower() for col in df.columns]
+            
+            if count_column not in df.columns:
+                self.csv_stats_text.setPlainText(f"Column '{count_column}' not found in CSV.")
+                return
+            
+            # Convertir columna de conteo a numérico
+            df[count_column] = pd.to_numeric(df[count_column], errors='coerce').fillna(0)
+            
+            # Calcular estadísticas básicas
+            total_parcels = int(df[count_column].sum())
+            groups_with_parcels = int((df[count_column] > 0).sum())
+            total_groups = len(df)
+            min_parcels = int(df[count_column].min())
+            max_parcels = int(df[count_column].max())
+            avg_parcels = df[count_column].mean()
+            
+            # Información adicional sobre gridcode si está configurado
+            gridcode_column = self.gridcode_column_combo.currentData()
+            gridcode_info = ""
+            if gridcode_column and gridcode_column in df.columns:
+                unique_gridcodes = df[gridcode_column].nunique()
+                gridcode_info = f" | GridCodes únicos: {unique_gridcodes}"
+            
+            # Generar texto de estadísticas
+            stats_text = f"📊 RESUMEN DEL CSV ({os.path.basename(csv_path)}):\n"
+            stats_text += f"🎯 Total de parcelas a generar: {total_parcels:,}\n"
+            stats_text += f"📦 Grupos con parcelas (≥1): {groups_with_parcels:,} de {total_groups:,} ({groups_with_parcels/total_groups*100:.1f}%){gridcode_info}\n"
+            stats_text += f"📏 Rango por grupo: {min_parcels}-{max_parcels} parcelas (promedio: {avg_parcels:.1f})\n"
+            
+            # Agregar información sobre distribución por gridcode si existe
+            if gridcode_column and gridcode_column in df.columns:
+                stats_text += f"🔢 Distribución por GridCode: "
+                gridcode_dist = df[df[count_column] > 0].groupby(gridcode_column)[count_column].sum().sort_values(ascending=False)
+                dist_text = ", ".join([f"{k}({v})" for k, v in gridcode_dist.head(3).items()])
+                stats_text += dist_text
+                if len(gridcode_dist) > 3:
+                    stats_text += f" +{len(gridcode_dist)-3} más"
+            
+            self.csv_stats_text.setPlainText(stats_text)
+            
+        except Exception as e:
+            self.csv_stats_text.setPlainText(f"Error calculating statistics: {e}")
 
     def _add_field_mapping(self):
         """Agrega una nueva fila de mapeo de campos."""
@@ -843,6 +971,11 @@ class PipelineTab(QWidget):
         if use_csv:
             config["count_column_csv"] = self.count_column_combo.currentText()
             config["field_mappings"] = self._get_field_mappings()
+            
+            # NUEVO: Configuración de gridcode del CSV
+            gridcode_column = self.gridcode_column_combo.currentData()
+            if gridcode_column:  # Si no es auto-detect
+                config["gridcode_column_csv"] = gridcode_column
         
         return config
 
@@ -947,6 +1080,13 @@ class PipelineTab(QWidget):
                 count_index = self.count_column_combo.findText(count_column)
                 if count_index >= 0:
                     self.count_column_combo.setCurrentIndex(count_index)
+            
+            # NUEVO: Restaurar configuración de gridcode del CSV
+            gridcode_column = config.get("gridcode_column_csv", "")
+            if gridcode_column:
+                gridcode_index = self.gridcode_column_combo.findData(gridcode_column)
+                if gridcode_index >= 0:
+                    self.gridcode_column_combo.setCurrentIndex(gridcode_index)
             
             # Restaurar mapeos de campos
             field_mappings = config.get("field_mappings", [])

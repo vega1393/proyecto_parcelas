@@ -14,20 +14,23 @@ def aplicar_filtros_iniciales(
     filtros_campos: Dict[str, Union[List[str], Callable]]
 ) -> gpd.GeoDataFrame:
     """
-    Aplica filtros iniciales a los datos basados en la configuración.
-
+    Aplica filtros iniciales a los datos basándose en campos específicos.
+    
     Args:
-        gdf: GeoDataFrame a filtrar
-        filtros_campos: Diccionario con filtros por campo (lista de valores o función)
-
+        gdf: GeoDataFrame con los datos de entrada
+        filtros_campos: Diccionario con los filtros a aplicar por campo
+        
     Returns:
         GeoDataFrame filtrado
         
     Raises:
         ValueError: Si no quedan registros después de aplicar los filtros
     """
-    registros_iniciales = len(gdf)
-    logger.info(f"Registros iniciales: {registros_iniciales}")
+    logger.info(f"Registros iniciales: {len(gdf)}")
+    
+    if not filtros_campos:
+        logger.info("No hay filtros configurados. Manteniendo todos los registros.")
+        return gdf
 
     for campo, filtro in filtros_campos.items():
         if campo in gdf.columns:
@@ -36,15 +39,15 @@ def aplicar_filtros_iniciales(
             # Log valores únicos antes del filtro para diagnóstico
             if not callable(filtro):
                 valores_unicos = gdf[campo].dropna().unique()
-                logger.info(f"Valores únicos en campo '{campo}': {list(valores_unicos)[:10]}{'...' if len(valores_unicos) > 10 else ''}")
-                logger.info(f"Valores buscados en filtro: {filtro}")
+                logger.debug(f"Valores únicos en campo '{campo}': {list(valores_unicos)[:10]}{'...' if len(valores_unicos) > 10 else ''}")
+                logger.debug(f"Valores buscados en filtro: {filtro}")
                 
                 # Verificar si algún valor del filtro existe en los datos
                 valores_encontrados = [v for v in filtro if v in valores_unicos]
                 valores_no_encontrados = [v for v in filtro if v not in valores_unicos]
                 
                 if valores_encontrados:
-                    logger.info(f"Valores del filtro encontrados en los datos: {valores_encontrados}")
+                    logger.debug(f"Valores del filtro encontrados en los datos: {valores_encontrados}")
                 if valores_no_encontrados:
                     logger.warning(f"Valores del filtro NO encontrados en los datos: {valores_no_encontrados}")
             

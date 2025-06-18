@@ -100,8 +100,8 @@ def generar_parcelas(gdf: gpd.GeoDataFrame, group_cols: list, min_distance: floa
 
     gdf_to_process = gdf[gdf['n_parcelas'] > 0].copy()
     all_points_data = []
+    group_parcel_counts = {}  # Track parcels generated per group
 
-    # ... (el resto de la función, el bucle for, no cambia) ...
     for i in range(retry_attempts + 1):
         if gdf_to_process.empty:
             logger.info("All groups processed.")
@@ -121,10 +121,23 @@ def generar_parcelas(gdf: gpd.GeoDataFrame, group_cols: list, min_distance: floa
         
         successful_groups = []
         for res in results:
-            if res['parcels_generated'] > 0:
-                all_points_data.extend(res['points'])
-            if res['parcels_generated'] >= res['parcels_requested']:
-                successful_groups.append(res['group_id'])
+            group_id = res['group_id']
+            parcels_needed = res['parcels_requested']
+            parcels_generated = res['parcels_generated']
+            
+            # Track current count for this group
+            current_count = group_parcel_counts.get(group_id, 0)
+            
+            if parcels_generated > 0:
+                # Only add parcels up to the limit needed
+                parcels_to_add = min(parcels_generated, parcels_needed - current_count)
+                if parcels_to_add > 0:
+                    all_points_data.extend(res['points'][:parcels_to_add])
+                    group_parcel_counts[group_id] = current_count + parcels_to_add
+            
+            # Check if group is complete
+            if group_parcel_counts.get(group_id, 0) >= parcels_needed:
+                successful_groups.append(group_id)
         
         # Prepare for next retry: filter out groups that are now complete
         gdf_to_process = gdf_to_process[~gdf_to_process.apply(lambda row: "_".join([str(row.get(col, '')) for col in group_cols if col in row]), axis=1).isin(successful_groups)]
@@ -132,7 +145,16 @@ def generar_parcelas(gdf: gpd.GeoDataFrame, group_cols: list, min_distance: floa
 
     if all_points_data:
         points_gdf = gpd.GeoDataFrame(all_points_data, crs=gdf.crs)
-        logger.info(f"Total parcels generated: {len(points_gdf)}. Saving to {output_path}")
+        
+        # Log detailed summary
+        total_requested = sum(int(row['n_parcelas']) for _, row in gdf[gdf['n_parcelas'] > 0].iterrows())
+        total_generated = len(points_gdf)
+        logger.info(f"PARCEL GENERATION SUMMARY:")
+        logger.info(f"   - Total parcels requested: {total_requested}")
+        logger.info(f"   - Total parcels generated: {total_generated}")
+        logger.info(f"   - Generation accuracy: {(total_generated/total_requested*100):.1f}%")
+        
+        logger.info(f"Saving {total_generated} parcels to {output_path}")
         pyogrio.write_dataframe(points_gdf, output_path)
         return points_gdf
     

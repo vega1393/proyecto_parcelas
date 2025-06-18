@@ -40,58 +40,56 @@ def main():
         print(json.dumps({"type": "error", "message": error_msg}), flush=True)
         sys.exit(1)
 
+    # Cargar configuración
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            params = json.load(f)
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
         print("[DEBUG] Configuración JSON cargada.")
     except Exception as e:
-        error_msg = f"Fallo al leer o parsear el archivo de configuración {config_path}: {e}"
-        tb_lines = traceback.format_exc().splitlines()
-        print(json.dumps({"type": "error", "message": error_msg, "traceback_lines": tb_lines}), flush=True)
+        error_msg = f"Error cargando configuración JSON: {e}"
+        print(json.dumps({"type": "error", "message": error_msg}), flush=True)
         sys.exit(1)
 
-    # El callback para el progreso no cambia
+    # Callback para reportar progreso
     def progress_callback(value, status):
         print(json.dumps({"type": "progress", "value": value, "status": status}), flush=True)
 
     try:
         print("[DEBUG] Llamando a ejecutar_proceso...")
         
-        # Extraer configuración de delivery
-        delivery_config = None
-        if params.get("delivery_code") or params.get("date_today"):
-            delivery_config = {
-                "delivery_code": params.get("delivery_code", "d01"),
-                "date_today": params.get("date_today", "20250617"),
-                "base_prefix": params.get("delivery_metadata", {}).get("base_prefix", ""),
-                "custom_suffix": params.get("delivery_metadata", {}).get("custom_suffix", ""),
-                "subdirectories": {
-                    "results": "results",
-                    "logs": "logs", 
-                    "summary": "summary"
-                }
-            }
+        # Extraer delivery config si está presente
+        delivery_config = config.get('delivery_config')
+        if delivery_config:
             print(f"[DEBUG] Delivery config extracted: {delivery_config}")
         
-        # Llamar a la función del pipeline con todos los parámetros
-        ejecutar_proceso(
-            input_path=params["input_path"],
-            output_dir=params["output_dir"],
-            entrega=params.get("entrega"),
-            estilo=params["style"],
-            cfg_overrides=params.get("cfg_overrides", {}),
+        resultados = ejecutar_proceso(
+            input_path=config["input_path"],
+            output_dir=config.get("output_dir"),
+            entrega=config.get("entrega"),
+            estilo=config.get("estilo", "calibracion"),
+            cfg_overrides=config.get("cfg_overrides", {}),
             progress_callback=progress_callback,
-            use_csv=params.get("use_csv", False),
-            csv_path=params.get("csv_path"),
-            grouping_fields=params.get("grouping_fields"),
-            delivery_config=delivery_config
+            use_csv=config.get("use_csv", False),
+            csv_path=config.get("csv_path"),
+            grouping_fields=config.get("grouping_fields"),
+            delivery_config=delivery_config,
+            gridcode_column_csv=config.get("gridcode_column_csv")
         )
-        print(json.dumps({"type": "success", "message": "Proceso completado con éxito."}), flush=True)
-
+        
+        print(json.dumps({"type": "success", "message": "Proceso completado exitosamente", "resultados": "Ver archivos de salida"}), flush=True)
+        
+        # Limpiar archivo temporal de configuración si existe
+        if os.path.exists(config_path) and config_path.startswith(os.path.join(os.path.dirname(__file__), "src", "json_config", "tmp")):
+            try:
+                os.remove(config_path)
+                print(f"[INFO] Removed temporary config: {config_path}")
+            except Exception as e:
+                print(f"[WARNING] Could not remove temporary config file: {e}")
+        
     except Exception as e:
+        error_message = f"Error durante la ejecución del pipeline: {str(e)}"
         tb_lines = traceback.format_exc().splitlines()
-        error_msg = f"Error durante la ejecución de ejecutar_proceso: {e}"
-        print(json.dumps({"type": "error", "message": error_msg, "traceback_lines": tb_lines}), flush=True)
+        print(json.dumps({"type": "error", "message": error_message, "traceback_lines": tb_lines}), flush=True)
         sys.exit(1)
 
 

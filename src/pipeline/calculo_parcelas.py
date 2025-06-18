@@ -78,19 +78,26 @@ def calcular_cantidad_de_parcelas(
         logger.error("El dissolve inicial no produjo ningún grupo, incluso después de limpiar los datos. Revisa la lógica de agrupación y los filtros previos.")
         return gpd.GeoDataFrame()
 
-    # 4) Calcular n_parcelas (lógica sin cambios)
-    if use_intensidad_especifica:
-        def get_intensidad_especifica(row):
-            for campo, intensidades in intensidad_por_campo.items():
-                if campo in row and row[campo] in intensidades:
-                    return intensidades[row[campo]]
-            return intensidad
-        dissolved_initial['intensidad'] = dissolved_initial.apply(get_intensidad_especifica, axis=1)
+    # 4) Calcular n_parcelas 
+    if intensidad == 0:
+        # Modo CSV: No calcular parcelas por intensidad, se asignarán desde CSV
+        logger.info("Modo CSV detectado (intensidad=0): estableciendo n_parcelas=0 temporalmente")
+        dissolved_initial['intensidad'] = 0
+        dissolved_initial['n_parcelas'] = 0
     else:
-        dissolved_initial['intensidad'] = intensidad
-    
-    dissolved_initial['n_parcelas'] = (dissolved_initial['area_ha'] / dissolved_initial['intensidad']).round().astype(int)
-    dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].apply(lambda x: max(x, 1) if x > 0 else 0)
+        # Modo normal: calcular por intensidad
+        if use_intensidad_especifica:
+            def get_intensidad_especifica(row):
+                for campo, intensidades in intensidad_por_campo.items():
+                    if campo in row and row[campo] in intensidades:
+                        return intensidades[row[campo]]
+                return intensidad
+            dissolved_initial['intensidad'] = dissolved_initial.apply(get_intensidad_especifica, axis=1)
+        else:
+            dissolved_initial['intensidad'] = intensidad
+        
+        dissolved_initial['n_parcelas'] = (dissolved_initial['area_ha'] / dissolved_initial['intensidad']).round().astype(int)
+        dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].apply(lambda x: max(x, 1) if x > 0 else 0)
 
     if min_parcelas is not None:
         dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].clip(lower=min_parcelas)

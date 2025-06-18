@@ -117,16 +117,22 @@ class ParcelGeneratorApp(QMainWindow):
 
     def _on_gridcode_config_changed(self, gridcode_config: Dict[str, Any]):
         """Maneja cambios en la configuración de GridCode."""
-        self.pipeline_config['GRIDCODE_CONFIG'] = gridcode_config
-        if gridcode_config.get('enabled'):
-            self.log_text.append("[INFO] GridCode configuration enabled and updated.")
-        else:
-            self.log_text.append("[INFO] GridCode configuration disabled.")
+        # Solo actualizar si realmente cambió para evitar mensajes duplicados
+        previous_config = self.pipeline_config.get('GRIDCODE_CONFIG', {})
+        if previous_config != gridcode_config:
+            self.pipeline_config['GRIDCODE_CONFIG'] = gridcode_config
+            if gridcode_config.get('enabled'):
+                self.log_text.append("[INFO] GridCode configuration enabled and updated.")
+            else:
+                self.log_text.append("[INFO] GridCode configuration disabled.")
 
     def _on_delivery_config_changed(self, delivery_config: Dict[str, Any]):
         """Maneja cambios en la configuración de entrega."""
-        self.pipeline_config['DELIVERY_CONFIG'] = delivery_config
-        self.log_text.append(f"[INFO] Delivery configuration updated: {delivery_config.get('delivery_code', 'N/A')}")
+        # Solo actualizar si realmente cambió para evitar mensajes duplicados
+        previous_config = self.pipeline_config.get('DELIVERY_CONFIG', {})
+        if previous_config != delivery_config:
+            self.pipeline_config['DELIVERY_CONFIG'] = delivery_config
+            self.log_text.append(f"[INFO] Delivery configuration updated: {delivery_config.get('delivery_code', 'N/A')}")
 
     def _on_column_order_config_changed(self, column_order_config: Dict[str, Any]):
         """Maneja cambios en la configuración de orden de columnas."""
@@ -225,6 +231,8 @@ class ParcelGeneratorApp(QMainWindow):
 
     def _on_process_stdout(self):
         data = self.process.readAllStandardOutput().data().decode("utf-8", errors="replace")
+        log_level = self.config_tab.findChild(QComboBox, "log_level_combo").currentText()
+        
         for line in data.strip().splitlines():
             try:
                 msg = json.loads(line)
@@ -233,9 +241,28 @@ class ParcelGeneratorApp(QMainWindow):
                     self.pipeline_tab.update_progress(msg.get("value", 0))
                     self.log_text.append(f"[PROGRESS] {msg.get('value', 0)}% - {msg.get('status', '')}")
                 elif msg_type == "log":
-                    self.log_text.append(f"[{msg.get('level', 'info').upper()}] {msg.get('message', '')}")
+                    level = msg.get('level', 'info').upper()
+                    message = msg.get('message', '')
+                    
+                    # Filtrar logs según el nivel seleccionado
+                    if log_level == "INFO":
+                        # Solo mostrar INFO, WARNING, ERROR en modo INFO
+                        if level in ["INFO", "WARNING", "ERROR"]:
+                            # Filtrar mensajes muy técnicos incluso en INFO
+                            if not any(skip_phrase in message.lower() for skip_phrase in [
+                                "columnas disponibles:", "primeras 3 filas", "resultado del merge:",
+                                "columnas extra del csv eliminadas", "harmonizando tipos",
+                                "performing spatial join", "columns after join", "renamed columns",
+                                "final columns after cleanup", "parcels before join", "parcels after join",
+                                "field '", "': ", "non-null values", "dropped columns"
+                            ]):
+                                self.log_text.append(f"[{level}] {message}")
+                    else:
+                        # Mostrar todos los logs en modo DEBUG
+                        self.log_text.append(f"[{level}] {message}")
                 elif msg_type == "success":
                     self.pipeline_tab.update_progress(100)
+                    self.log_text.append(f"[SUCCESS] {msg.get('message', 'Process completed successfully.')}")
                     QMessageBox.information(self, "Success", msg.get("message", "Process completed successfully."))
                 elif msg_type == "error":
                     error_msg = msg.get('message', 'An unknown error occurred.')
@@ -244,9 +271,13 @@ class ParcelGeneratorApp(QMainWindow):
                     self.log_text.append(f"[ERROR] {full_error}")
                     QMessageBox.critical(self, "Pipeline Error", full_error)
                 else:
-                    self.log_text.append(f"[PROCESS] {line}")
+                    # Solo mostrar logs de proceso no-JSON en modo DEBUG
+                    if log_level == "DEBUG":
+                        self.log_text.append(f"[PROCESS] {line}")
             except json.JSONDecodeError:
-                self.log_text.append(f"[PROCESS] {line}")
+                # Solo mostrar logs de proceso no-JSON en modo DEBUG
+                if log_level == "DEBUG":
+                    self.log_text.append(f"[PROCESS] {line}")
 
     def _on_process_stderr(self):
         error_data = self.process.readAllStandardError().data().decode("utf-8", errors="replace").strip()
@@ -328,6 +359,11 @@ class ParcelGeneratorApp(QMainWindow):
         if base_config.get("use_csv"):
             full_config["count_column_csv"] = base_config.get("count_column_csv")
             full_config["field_mappings"] = base_config.get("field_mappings", [])
+            
+            # NUEVO: Agregar configuración de gridcode del CSV
+            gridcode_column_csv = base_config.get("gridcode_column_csv")
+            if gridcode_column_csv:
+                full_config["gridcode_column_csv"] = gridcode_column_csv
         
         # Agregar configuraciones adicionales
         if self.pipeline_config.get("PO_CONFIG"):
@@ -417,6 +453,7 @@ class ParcelGeneratorApp(QMainWindow):
             if config.get("use_csv"):
                 pipeline_config["count_column_csv"] = config.get("count_column_csv")
                 pipeline_config["field_mappings"] = config.get("field_mappings", [])
+                pipeline_config["gridcode_column_csv"] = config.get("gridcode_column_csv")
             
             cfg_overrides = config.get("cfg_overrides", {})
             po_config = cfg_overrides.get("PO_CONFIG", {})
@@ -478,6 +515,7 @@ class ParcelGeneratorApp(QMainWindow):
         if pipeline_settings.get("use_csv"):
             full_settings["count_column_csv"] = pipeline_settings.get("count_column_csv")
             full_settings["field_mappings"] = pipeline_settings.get("field_mappings", [])
+            full_settings["gridcode_column_csv"] = pipeline_settings.get("gridcode_column_csv")
         
         save_gui_settings(full_settings)
         self.log_text.append("[INFO] Enhanced GUI settings saved successfully.")
@@ -503,6 +541,7 @@ class ParcelGeneratorApp(QMainWindow):
         if use_csv_value:
             pipeline_config["count_column_csv"] = settings.get("count_column_csv")
             pipeline_config["field_mappings"] = settings.get("field_mappings", [])
+            pipeline_config["gridcode_column_csv"] = settings.get("gridcode_column_csv")
         
         po_config = settings.get("po_config", {})
         exclusion_config = settings.get("exclusion_list", [])
