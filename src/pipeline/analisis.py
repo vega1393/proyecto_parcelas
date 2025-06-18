@@ -90,7 +90,7 @@ def analizar_perdidas_parcelas(
     else:
         analisis_df['n_parcelas_post_filtros'] = analisis_df['n_parcelas_inicial']
         analisis_df['area_ha_post_filtros'] = analisis_df['area_ha_inicial']
-    
+
     # Análisis post-exclusión
     if gdf_post_exclusion is not None:
         # Preparar diccionario de agregación dinámicamente

@@ -1,0 +1,107 @@
+{
+    "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E02_Metricas.gpkg",
+    "output_dir": "C:\\TRABAJO\\01_solicitud\\74_compilacion_proyectos_20250520\\01_gen_parcelas-vg\\test09",
+    "style": "custom",
+    "use_csv": true,
+    "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E02_20250609_81p.csv",
+    "grouping_fields": [
+        "tipouso",
+        "tipomateri",
+        "gridcode"
+    ],
+    "entrega": null,
+    "cfg_overrides": {
+        "PROJECTED_CRS": 31982,
+        "AREA_MINIMA_HA": 0.3,
+        "BUFFER_DISTANCE": -20,
+        "MIN_DISTANCE": 59.8,
+        "ID_PARCELA_INICIO": 1,
+        "VERSION_PARCELA": "A",
+        "MIN_PARCELAS_HABILITADO": false,
+        "MIN_PARCELAS": 1,
+        "MAX_PARCELAS_HABILITADO": false,
+        "MAX_PARCELAS": 10,
+        "INTENSIDAD": 50,
+        "USE_INTENSIDAD_ESPECIFICA": false,
+        "INTENSIDAD_POR_CAMPO": {},
+        "PO_CONFIG": {
+            "ruta": "C:/TRABAJO/06_proyectos/07_fasa2025/04_po_operativo/uso_suelo_from_arauco/UsoActual_Marzo_2025.gdb",
+            "capa": "Uso_de_Suelo_Marzo",
+            "campos": [],
+            "campos_id_fasa": {
+                "predio": "predio",
+                "tipo": "tipouso"
+            }
+        },
+        "CAPAS_EXCLUSION": [],
+        "USE_GRIDCODE": true,
+        "GRIDCODE_PARAMS": {
+            "field1": {
+                "field": "cov",
+                "bins": [
+                    {
+                        "max": 50.0,
+                        "id": 1
+                    },
+                    {
+                        "min": 50.0,
+                        "max": 70.0,
+                        "id": 2
+                    },
+                    {
+                        "min": 70.0,
+                        "id": 3
+                    }
+                ]
+            },
+            "field2": {
+                "field": "p95",
+                "bins": [
+                    {
+                        "max": 12.0,
+                        "id": 1
+                    },
+                    {
+                        "min": 12.0,
+                        "max": 16.0,
+                        "id": 2
+                    },
+                    {
+                        "min": 16.0,
+                        "max": 20.0,
+                        "id": 3
+                    },
+                    {
+                        "min": 20.0,
+                        "max": 24.0,
+                        "id": 4
+                    },
+                    {
+                        "min": 24.0,
+                        "id": 5
+                    }
+                ]
+            }
+        }
+    },
+    "count_column_csv": "n",
+    "field_mappings": [
+        [
+            "tipouso",
+            "tipouso"
+        ],
+        [
+            "tipomateri",
+            "tipomateri"
+        ]
+    ],
+    "gridcode_column_csv": "gridcode",
+    "delivery_code": "E01",
+    "date_today": "20250618",
+    "delivery_metadata": {
+        "description": "Generaci\u00f3n de parcelas Brasil 2025 - Entrega E02 v1",
+        "version": "v01",
+        "operator": "vegatest",
+        "timestamp": "2025-06-18T13:52:23.242178"
+    }
+}

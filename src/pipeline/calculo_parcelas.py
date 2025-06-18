@@ -99,10 +99,10 @@ def calcular_cantidad_de_parcelas(
         dissolved_initial['n_parcelas'] = (dissolved_initial['area_ha'] / dissolved_initial['intensidad']).round().astype(int)
         dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].apply(lambda x: max(x, 1) if x > 0 else 0)
 
-    if min_parcelas is not None:
-        dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].clip(lower=min_parcelas)
-    if max_parcelas is not None:
-        dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].clip(upper=max_parcelas)
+        if min_parcelas is not None:
+            dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].clip(lower=min_parcelas)
+        if max_parcelas is not None:
+            dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].clip(upper=max_parcelas)
 
     keep_cols = [col for col in group_cols + ['area_ha', 'area_m2', 'n_parcelas', 'intensidad', 'geometry'] if col in dissolved_initial.columns]
     dissolved_initial = dissolved_initial[keep_cols]

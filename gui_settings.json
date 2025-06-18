@@ -1,6 +1,6 @@
 {
     "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E02_Metricas.gpkg",
-    "output_dir": "C:\\TRABAJO\\01_solicitud\\74_compilacion_proyectos_20250520\\01_gen_parcelas-vg\\test08",
+    "output_dir": "C:\\TRABAJO\\01_solicitud\\74_compilacion_proyectos_20250520\\01_gen_parcelas-vg\\test09",
     "style": "custom",
     "grouping_fields": [
         "tipouso",
@@ -20,17 +20,9 @@
         "MAX_PARCELAS": 10
     },
     "po_config": {
-        "ruta": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/01_po/01_po_from_arauco/po_brasil_2025_v04_usoabril.gpkg",
-        "capa": "uso_suelo",
-        "campos": [
-            "predio",
-            "rodal",
-            "anoplantac",
-            "talhao",
-            "mesplantac",
-            "tipouso",
-            "tipomateri"
-        ],
+        "ruta": "C:/TRABAJO/06_proyectos/07_fasa2025/04_po_operativo/uso_suelo_from_arauco/UsoActual_Marzo_2025.gdb",
+        "capa": "Uso_de_Suelo_Marzo",
+        "campos": [],
         "campos_id_fasa": {
             "predio": "predio",
             "tipo": "tipouso"
@@ -103,15 +95,26 @@
             "description": "Generaci\u00f3n de parcelas Brasil 2025 - Entrega E02 v1",
             "version": "v01",
             "operator": "vegatest",
-            "timestamp": "2025-06-18T13:17:32.907232"
+            "timestamp": "2025-06-18T13:52:17.778848"
         }
     },
     "column_order_config": {
-        "file_path": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test03/results/20250617_E02_PARCELAS_FINALES.gpkg",
-        "output_path": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test03/results/20250617_E02_PARCELAS_FINALES_ordenada.gpkg",
+        "file_path": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test08/results/20250617_D01_PARCELAS_FINALES.gpkg",
+        "output_path": "C:/TRABAJO/01_solicitud/74_compilacion_proyectos_20250520/01_gen_parcelas-vg/test08/results/20250617_D01_PARCELAS_FINALES_ordenada.gpkg",
         "create_backup": false,
         "geometry_first": false,
-        "column_order": []
+        "column_order": [
+            "geom",
+            "id_parcel",
+            "id_parcela",
+            "tipouso",
+            "tipomateri",
+            "gridcode",
+            "group_id",
+            "punto_x",
+            "punto_y",
+            "area_m2"
+        ]
     },
     "sampling_config": {
         "use_csv": true,

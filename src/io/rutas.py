@@ -81,7 +81,7 @@ def configurar_rutas(
         'logs_dir': full_logs_dir,
         'summary_dir': full_summary_dir
     }
-    
+
     # Configurar rutas para archivos de salida con nomenclatura profesional
     rutas.update({
         # Logs

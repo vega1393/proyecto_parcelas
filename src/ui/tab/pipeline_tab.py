@@ -210,7 +210,7 @@ class PipelineTab(QWidget):
         spinbox.setRange(min_val, max_val)
         spinbox.setValue(default)
         return spinbox
-
+        
     def _create_double_spinbox(self, min_val, max_val, default, step):
         spinbox = QDoubleSpinBox()
         spinbox.setRange(min_val, max_val)
@@ -251,7 +251,7 @@ class PipelineTab(QWidget):
         if not input_path or not os.path.exists(input_path):
             QMessageBox.warning(self, "Warning", "Please select a valid input file first.")
             return
-        
+
         try:
             # Obtener campos disponibles del archivo de entrada
             layers = list_layers(input_path)
@@ -521,7 +521,7 @@ class PipelineTab(QWidget):
         self.progress_bar.setVisible(is_running)
         if not is_running:
             self.progress_bar.setValue(0)
-
+        
     def update_progress(self, value: int):
         """Actualiza la barra de progreso."""
-        self.progress_bar.setValue(value) 
+        self.progress_bar.setValue(value)

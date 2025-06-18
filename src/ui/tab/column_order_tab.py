@@ -6,6 +6,7 @@ Tab for reordering columns in output files.
 import os
 from typing import Dict, Any, List, Optional
 import json
+from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, 
@@ -159,6 +160,19 @@ class ColumnOrderTab(QWidget):
         title_layout = QHBoxLayout()
         title_layout.addWidget(QLabel("Available Columns (drag to reorder, uncheck to exclude):"))
         title_layout.addStretch()
+        
+        # Botones de esquemas de columnas
+        self.save_schema_btn = QPushButton("💾 Save Schema")
+        self.save_schema_btn.setMaximumWidth(100)
+        self.save_schema_btn.setToolTip("Save current column order as a reusable schema")
+        self.save_schema_btn.clicked.connect(self._save_column_schema)
+        title_layout.addWidget(self.save_schema_btn)
+        
+        self.load_schema_btn = QPushButton("📂 Load Schema")
+        self.load_schema_btn.setMaximumWidth(100)
+        self.load_schema_btn.setToolTip("Load a previously saved column order schema")
+        self.load_schema_btn.clicked.connect(self._load_column_schema)
+        title_layout.addWidget(self.load_schema_btn)
         
         self.load_columns_btn = QPushButton("Load Columns")
         self.load_columns_btn.setMaximumWidth(100)
@@ -401,6 +415,10 @@ class ColumnOrderTab(QWidget):
         self.reset_btn.setEnabled(has_columns)
         self.apply_btn.setEnabled(has_file and has_columns)
         self.preview_btn.setEnabled(has_columns)
+        
+        # Control de botones de esquemas
+        self.save_schema_btn.setEnabled(has_columns)
+        self.load_schema_btn.setEnabled(has_file)  # Necesita archivo para validar compatibilidad
 
     def _browse_file(self) -> None:
         """Abre diálogo para seleccionar archivo."""
@@ -941,4 +959,214 @@ class ColumnOrderTab(QWidget):
         
         # Si hay un archivo, cargar información
         if config.get("file_path"):
-            self._load_file_info(config["file_path"]) 
+            self._load_file_info(config["file_path"])
+
+    def _save_column_schema(self) -> None:
+        """Guarda el esquema actual de orden de columnas."""
+        if not self._original_columns:
+            QMessageBox.warning(self, "Warning", "No columns loaded to save as schema.")
+            return
+            
+        # Obtener el orden actual y estado de selección
+        schema_data = {
+            "schema_version": "1.0",
+            "created_date": datetime.now().isoformat(),
+            "source_file": os.path.basename(self._current_file_path) if self._current_file_path else "unknown",
+            "total_columns": len(self._original_columns),
+            "column_order": [],
+            "excluded_columns": [],
+            "settings": {
+                "geometry_first": self.geometry_first_checkbox.isChecked()
+            }
+        }
+        
+        # Recopilar información de todas las columnas
+        for i in range(self.columns_list.count()):
+            item = self.columns_list.item(i)
+            column_name = item.text()
+            is_selected = item.checkState() == Qt.CheckState.Checked
+            is_geometry = column_name.lower() in ['geometry', 'geom', 'shape']
+            
+            column_info = {
+                "name": column_name,
+                "position": i,
+                "is_geometry": is_geometry
+            }
+            
+            if is_selected:
+                schema_data["column_order"].append(column_info)
+            else:
+                schema_data["excluded_columns"].append(column_info)
+        
+        # Diálogo para guardar archivo
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Column Schema",
+            f"column_schema_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            "JSON Files (*.json);;All Files (*)"
+        )
+        
+        if not file_path:
+            return
+            
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(schema_data, f, indent=2, ensure_ascii=False)
+                
+            QMessageBox.information(
+                self, "Success", 
+                f"Column schema saved successfully!\n\n"
+                f"File: {os.path.basename(file_path)}\n"
+                f"Columns: {len(schema_data['column_order'])} selected, {len(schema_data['excluded_columns'])} excluded"
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save schema:\n{e}")
+
+    def _load_column_schema(self) -> None:
+        """Carga un esquema de orden de columnas previamente guardado."""
+        if not self._original_columns:
+            QMessageBox.warning(self, "Warning", "Please load a file first before applying a column schema.")
+            return
+            
+        # Diálogo para abrir archivo
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Column Schema",
+            "",
+            "JSON Files (*.json);;All Files (*)"
+        )
+        
+        if not file_path:
+            return
+            
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                schema_data = json.load(f)
+                
+            # Validar estructura del esquema
+            if not isinstance(schema_data, dict) or "column_order" not in schema_data:
+                QMessageBox.warning(self, "Warning", "Invalid schema file format.")
+                return
+                
+            # Obtener columnas actuales del archivo
+            current_columns = set(self._original_columns)
+            
+            # Extraer nombres de columnas del esquema
+            schema_selected = [col["name"] if isinstance(col, dict) else col for col in schema_data.get("column_order", [])]
+            schema_excluded = [col["name"] if isinstance(col, dict) else col for col in schema_data.get("excluded_columns", [])]
+            schema_all_columns = set(schema_selected + schema_excluded)
+            
+            # Validar compatibilidad
+            matching_columns = current_columns.intersection(schema_all_columns)
+            missing_in_file = schema_all_columns - current_columns
+            new_in_file = current_columns - schema_all_columns
+            
+            # Mostrar información de compatibilidad
+            compatibility_info = []
+            compatibility_info.append(f"Schema file: {os.path.basename(file_path)}")
+            compatibility_info.append(f"Schema source: {schema_data.get('source_file', 'unknown')}")
+            compatibility_info.append(f"Created: {schema_data.get('created_date', 'unknown')}")
+            compatibility_info.append("")
+            compatibility_info.append(f"✅ Matching columns: {len(matching_columns)}")
+            compatibility_info.append(f"❌ Columns in schema but not in file: {len(missing_in_file)}")
+            compatibility_info.append(f"🆕 New columns in file: {len(new_in_file)}")
+            
+            if missing_in_file:
+                compatibility_info.append(f"\nMissing: {', '.join(sorted(missing_in_file))}")
+            if new_in_file:
+                compatibility_info.append(f"\nNew: {', '.join(sorted(new_in_file))}")
+                
+            # Preguntar al usuario si quiere continuar
+            reply = QMessageBox.question(
+                self, "Load Column Schema",
+                "\n".join(compatibility_info) + "\n\nDo you want to apply this schema?\n\n"
+                "Note: Only matching columns will be applied. New columns will be added at the end.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+                
+            # Aplicar el esquema
+            self._apply_column_schema(schema_data, current_columns)
+            
+            # Aplicar configuraciones
+            settings = schema_data.get("settings", {})
+            if "geometry_first" in settings:
+                self.geometry_first_checkbox.setChecked(settings["geometry_first"])
+                
+            self._update_preview()
+            
+            QMessageBox.information(
+                self, "Success",
+                f"Column schema applied successfully!\n\n"
+                f"Applied: {len(matching_columns)} matching columns\n"
+                f"New columns added at end: {len(new_in_file)}"
+            )
+            
+        except json.JSONDecodeError:
+            QMessageBox.critical(self, "Error", "Invalid JSON file format.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load schema:\n{e}")
+
+    def _apply_column_schema(self, schema_data: Dict[str, Any], current_columns: set) -> None:
+        """Aplica un esquema de columnas al orden actual."""
+        # Extraer información del esquema
+        schema_selected = []
+        schema_excluded = []
+        
+        for col in schema_data.get("column_order", []):
+            if isinstance(col, dict):
+                schema_selected.append(col["name"])
+            else:
+                schema_selected.append(col)
+                
+        for col in schema_data.get("excluded_columns", []):
+            if isinstance(col, dict):
+                schema_excluded.append(col["name"])
+            else:
+                schema_excluded.append(col)
+        
+        # Crear nuevo orden basado en el esquema
+        new_order = []
+        used_columns = set()
+        
+        # 1. Agregar columnas del esquema en el orden especificado (solo las que existen)
+        for col_name in schema_selected:
+            if col_name in current_columns:
+                new_order.append((col_name, True))  # (nombre, seleccionado)
+                used_columns.add(col_name)
+                
+        # 2. Agregar columnas excluidas del esquema (solo las que existen)
+        for col_name in schema_excluded:
+            if col_name in current_columns:
+                new_order.append((col_name, False))  # (nombre, no seleccionado)
+                used_columns.add(col_name)
+        
+        # 3. Agregar columnas nuevas que no estaban en el esquema (al final, seleccionadas)
+        remaining_columns = current_columns - used_columns
+        for col_name in sorted(remaining_columns):  # Ordenadas alfabéticamente
+            new_order.append((col_name, True))
+        
+        # Actualizar la lista de columnas
+        self.columns_list.clear()
+        for col_name, is_selected in new_order:
+            item = QListWidgetItem(col_name)
+            item.setToolTip(f"Column: {col_name}\nCheck to include in output, uncheck to exclude")
+            
+            # Hacer el item checkeable
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            
+            # Establecer estado de selección
+            item.setCheckState(Qt.CheckState.Checked if is_selected else Qt.CheckState.Unchecked)
+            
+            # Marcar geometría con color diferente
+            if col_name.lower() in ['geometry', 'geom', 'shape']:
+                item.setBackground(Qt.GlobalColor.lightGray)
+                item.setToolTip(f"Geometry Column: {col_name}\nRecommended to keep this column")
+                
+            self.columns_list.addItem(item)
+        
+        self._update_selected_count() 

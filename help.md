@@ -147,8 +147,22 @@ La aplicación soporta una amplia gama de formatos geoespaciales:
   - **Formatos soportados**: .gpkg, .shp, **.gdb**
   - **Geodatabases**: Selección automática de la primera capa disponible
 - **Drag & Drop**: Reordenar columnas arrastrando
+- **💾 Save Schema**: Guardar esquema de orden de columnas
+  - Guarda orden, selección y configuraciones
+  - Incluye metadatos del archivo fuente
+  - Formato JSON reutilizable
+- **📂 Load Schema**: Cargar esquema previamente guardado
+  - Validación inteligente de compatibilidad
+  - Mantiene solo columnas existentes
+  - Agrega nuevas columnas al final
 - **Geometry Position**: Controlar posición de columna geométrica
 - **Apply Changes**: Aplicar nuevo orden de columnas
+
+**💡 Uso de Esquemas**:
+1. **Crear esquema**: Configura orden ideal y guarda con "Save Schema"
+2. **Reutilizar**: En proyectos similares, usa "Load Schema" 
+3. **Validación automática**: Solo aplica columnas que existen en el archivo actual
+4. **Flexibilidad**: Nuevas columnas se agregan automáticamente al final
 
 ### 8. [⚙] **Configuration**
 **Propósito**: Gestión de configuraciones y logs

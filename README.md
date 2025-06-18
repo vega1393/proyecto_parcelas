@@ -52,14 +52,14 @@ sudo apt install python3 python3-pip python3-venv
 cd C:\ParcelGenerator
 
 # Crear entorno virtual
-python -m venv venv
+    python -m venv venv
 
 # Activar entorno virtual
 venv\Scripts\activate
-```
+    ```
 
 #### **macOS/Linux (Terminal):**
-```bash
+        ```bash
 # Navegar a la carpeta del proyecto
 cd /ruta/a/ParcelGenerator
 
@@ -67,14 +67,14 @@ cd /ruta/a/ParcelGenerator
 python3 -m venv venv
 
 # Activar entorno virtual
-source venv/bin/activate
-```
+        source venv/bin/activate
+        ```
 
 ### 📦 **Paso 4: Instalar Dependencias**
 Con el entorno virtual activado:
-```bash
-pip install -r requirements.txt
-```
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 **Nota**: La instalación puede tardar 5-10 minutos. Es normal ver muchos mensajes durante el proceso.
 
