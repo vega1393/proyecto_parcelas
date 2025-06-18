@@ -2,8 +2,6 @@
     "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E01_Metricas.gpkg",
     "output_dir": "C:\\TRABAJO\\01_solicitud\\74_compilacion_proyectos_20250520\\01_gen_parcelas-vg\\test05",
     "style": "custom",
-    "use_csv": true,
-    "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E01_20250605.csv",
     "grouping_fields": [
         "tipouso",
         "tipomateri",
@@ -25,9 +23,6 @@
         "MIN_DISTANCE": 80.0,
         "ID_PARCELA_INICIO": 1,
         "VERSION_PARCELA": "A"
-    },
-    "custom_params": {
-        "intensity": 80
     },
     "po_config": {
         "ruta": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/01_po/01_po_from_arauco/po_brasil_2025_v04_usoabril.gpkg",
@@ -113,7 +108,7 @@
             "description": "Generaci\u00f3n de parcelas Brasil 2025 - Entrega E02 v1",
             "version": "v01",
             "operator": "vegatest",
-            "timestamp": "2025-06-18T09:22:48.110535"
+            "timestamp": "2025-06-18T10:09:23.596768"
         }
     },
     "column_order_config": {
@@ -140,7 +135,29 @@
             "id_parcela_final"
         ]
     },
-    "count_column_csv": "n",
+    "sampling_config": {
+        "use_csv": true,
+        "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E01_20250605.csv",
+        "base_intensity": 79,
+        "use_specific_intensity": false,
+        "specific_intensities": {},
+        "count_column_csv": "",
+        "gridcode_column_csv": "",
+        "field_mappings": [
+            [
+                "tipouso",
+                "tipouso"
+            ],
+            [
+                "tipomateri",
+                "tipomateri"
+            ]
+        ]
+    },
+    "use_csv": true,
+    "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E01_20250605.csv",
+    "count_column_csv": "",
+    "gridcode_column_csv": "",
     "field_mappings": [
         [
             "tipouso",
@@ -151,5 +168,7 @@
             "tipomateri"
         ]
     ],
-    "gridcode_column_csv": "gridcode"
+    "custom_params": {
+        "intensity": 79
+    }
 }

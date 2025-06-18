@@ -16,6 +16,7 @@ from PyQt6.QtCore import Qt, QProcess, QProcessEnvironment
 
 from src.utils.settings import load_gui_settings, save_gui_settings
 from src.ui.tab.pipeline_tab import PipelineTab
+from src.ui.tab.sampling_tab import SamplingTab
 from src.ui.tab.po_tab import POTab
 from src.ui.tab.exclusion_tab import ExclusionTab
 from src.ui.tab.config_tab import ConfigTab
@@ -49,6 +50,7 @@ class ParcelGeneratorApp(QMainWindow):
         
         # Tabs existentes
         self.pipeline_tab = PipelineTab()
+        self.sampling_tab = SamplingTab()  # NUEVO
         self.po_tab = POTab()
         self.exclusion_tab = ExclusionTab()
         self.config_tab = ConfigTab()
@@ -60,11 +62,12 @@ class ParcelGeneratorApp(QMainWindow):
         
         # Agregar tabs en orden lógico
         tabs.addTab(self.pipeline_tab, "Pipeline")
-        tabs.addTab(self.gridcode_tab, "GridCode")  # NUEVO
+        tabs.addTab(self.sampling_tab, "Sampling Method")  # NUEVO
+        tabs.addTab(self.gridcode_tab, "GridCode")
         tabs.addTab(self.po_tab, "Plan Operative (PO)")
         tabs.addTab(self.exclusion_tab, "Exclusion Layers")
-        tabs.addTab(self.delivery_tab, "Delivery")  # NUEVO
-        tabs.addTab(self.column_order_tab, "Column Order")  # NUEVO
+        tabs.addTab(self.delivery_tab, "Delivery")
+        tabs.addTab(self.column_order_tab, "Column Order")
         tabs.addTab(self.config_tab, "Configuration")
         
         # Log widget
@@ -97,6 +100,7 @@ class ParcelGeneratorApp(QMainWindow):
         self.exclusion_tab.configChanged.connect(self._on_exclusions_changed)
         
         # Nuevas señales
+        self.sampling_tab.configChanged.connect(self._on_sampling_config_changed)  # NUEVO
         self.gridcode_tab.configChanged.connect(self._on_gridcode_config_changed)
         self.delivery_tab.configChanged.connect(self._on_delivery_config_changed)
         self.column_order_tab.configChanged.connect(self._on_column_order_config_changed)
@@ -114,6 +118,12 @@ class ParcelGeneratorApp(QMainWindow):
     def _on_exclusions_changed(self, exclusion_list: List[Dict[str, Any]]):
         self.pipeline_config['CAPAS_EXCLUSION'] = exclusion_list
         self.log_text.append(f"[INFO] Exclusion list updated.")
+
+    def _on_sampling_config_changed(self, sampling_config: Dict[str, Any]):
+        """Maneja cambios en la configuración de muestreo."""
+        self.pipeline_config['SAMPLING_CONFIG'] = sampling_config
+        method = "CSV-based" if sampling_config.get("use_csv") else "Intensity-based"
+        self.log_text.append(f"[INFO] Sampling method updated: {method}")
 
     def _on_gridcode_config_changed(self, gridcode_config: Dict[str, Any]):
         """Maneja cambios en la configuración de GridCode."""
@@ -342,28 +352,34 @@ class ParcelGeneratorApp(QMainWindow):
     def _get_full_pipeline_config(self) -> Dict[str, Any]:
         """Genera la configuración completa del pipeline incluyendo las nuevas funcionalidades."""
         base_config = self.pipeline_tab.get_config()
+        sampling_config = self.sampling_tab.get_config()
         
         # Configuración base
         full_config = {
             "input_path": base_config.get("input_path"),
             "output_dir": base_config.get("output_dir"),
             "style": base_config.get("style"),
-            "use_csv": base_config.get("use_csv"),
-            "csv_path": base_config.get("csv_path"),
+            "use_csv": sampling_config.get("use_csv", False),
+            "csv_path": sampling_config.get("csv_path"),
             "grouping_fields": base_config.get("grouping_fields"),
             "entrega": None,
             "cfg_overrides": base_config.get("cfg_overrides", {})
         }
         
-        # Agregar configuraciones de CSV avanzado
-        if base_config.get("use_csv"):
-            full_config["count_column_csv"] = base_config.get("count_column_csv")
-            full_config["field_mappings"] = base_config.get("field_mappings", [])
+        # Agregar configuraciones de muestreo
+        if sampling_config.get("use_csv"):
+            full_config["count_column_csv"] = sampling_config.get("count_column_csv")
+            full_config["field_mappings"] = sampling_config.get("field_mappings", [])
             
             # NUEVO: Agregar configuración de gridcode del CSV
-            gridcode_column_csv = base_config.get("gridcode_column_csv")
+            gridcode_column_csv = sampling_config.get("gridcode_column_csv")
             if gridcode_column_csv:
                 full_config["gridcode_column_csv"] = gridcode_column_csv
+        
+        # Agregar configuración de intensidad al cfg_overrides
+        full_config["cfg_overrides"]["INTENSIDAD"] = sampling_config.get("base_intensity", 80)
+        full_config["cfg_overrides"]["USE_INTENSIDAD_ESPECIFICA"] = sampling_config.get("use_specific_intensity", False)
+        full_config["cfg_overrides"]["INTENSIDAD_POR_CAMPO"] = sampling_config.get("specific_intensities", {})
         
         # Agregar configuraciones adicionales
         if self.pipeline_config.get("PO_CONFIG"):
@@ -494,28 +510,33 @@ class ParcelGeneratorApp(QMainWindow):
     def _save_gui_settings(self) -> None:
         """Guarda todas las configuraciones de la GUI incluyendo las nuevas."""
         pipeline_settings = self.pipeline_tab.get_config()
+        sampling_settings = self.sampling_tab.get_config()
         
         full_settings = {
             "input_path": pipeline_settings.get("input_path"),
             "output_dir": pipeline_settings.get("output_dir"),
             "style": pipeline_settings.get("style"),
-            "use_csv": pipeline_settings.get("use_csv"),
-            "csv_path": pipeline_settings.get("csv_path"),
             "grouping_fields": pipeline_settings.get("grouping_fields", []),
             "cfg_overrides": pipeline_settings.get("cfg_overrides", {}),
-            "custom_params": {"intensity": self.pipeline_tab.intensity_spin.value()},
             "po_config": self.po_tab.get_config(),
             "exclusion_list": self.exclusion_tab.get_config(),
             "gridcode_config": self.gridcode_tab.get_config(),
             "delivery_config": self.delivery_tab.get_config(),
-            "column_order_config": self.column_order_tab.get_config()
+            "column_order_config": self.column_order_tab.get_config(),
+            "sampling_config": sampling_settings
         }
         
-        # Agregar mapeo CSV si está activo
-        if pipeline_settings.get("use_csv"):
-            full_settings["count_column_csv"] = pipeline_settings.get("count_column_csv")
-            full_settings["field_mappings"] = pipeline_settings.get("field_mappings", [])
-            full_settings["gridcode_column_csv"] = pipeline_settings.get("gridcode_column_csv")
+        # Agregar configuración de muestreo directamente al nivel superior para compatibilidad
+        full_settings["use_csv"] = sampling_settings.get("use_csv", False)
+        full_settings["csv_path"] = sampling_settings.get("csv_path")
+        full_settings["count_column_csv"] = sampling_settings.get("count_column_csv")
+        full_settings["gridcode_column_csv"] = sampling_settings.get("gridcode_column_csv")
+        full_settings["field_mappings"] = sampling_settings.get("field_mappings", [])
+        
+        # Configuración de intensidad
+        full_settings["custom_params"] = {
+            "intensity": sampling_settings.get("base_intensity", 80)
+        }
         
         save_gui_settings(full_settings)
         self.log_text.append("[INFO] Enhanced GUI settings saved successfully.")
@@ -523,25 +544,30 @@ class ParcelGeneratorApp(QMainWindow):
     def _restore_gui_settings(self) -> None:
         """Carga configuraciones incluyendo las nuevas funcionalidades."""
         settings = load_gui_settings()
-        
-        use_csv_value = bool(settings.get("use_csv", False))
 
         pipeline_config = {
             "input_path": settings.get("input_path"),
             "output_dir": settings.get("output_dir"),
             "style": settings.get("style"),
-            "use_csv": use_csv_value,
-            "csv_path": settings.get("csv_path"),
             "grouping_fields": settings.get("grouping_fields", []),
-            "cfg_overrides": settings.get("cfg_overrides", {}),
-            "custom_params": settings.get("custom_params")
+            "cfg_overrides": settings.get("cfg_overrides", {})
         }
         
-        # Agregar mapeo CSV si existe
-        if use_csv_value:
-            pipeline_config["count_column_csv"] = settings.get("count_column_csv")
-            pipeline_config["field_mappings"] = settings.get("field_mappings", [])
-            pipeline_config["gridcode_column_csv"] = settings.get("gridcode_column_csv")
+        # Configuración de muestreo (puede venir del nuevo formato o del legacy)
+        sampling_config = settings.get("sampling_config", {})
+        if not sampling_config:
+            # Formato legacy - migrar desde configuración antigua
+            custom_params = settings.get("custom_params", {})
+            sampling_config = {
+                "use_csv": settings.get("use_csv", False),
+                "csv_path": settings.get("csv_path"),
+                "base_intensity": custom_params.get("intensity", 80),
+                "use_specific_intensity": False,
+                "specific_intensities": {},
+                "count_column_csv": settings.get("count_column_csv"),
+                "gridcode_column_csv": settings.get("gridcode_column_csv"),
+                "field_mappings": settings.get("field_mappings", [])
+            }
         
         po_config = settings.get("po_config", {})
         exclusion_config = settings.get("exclusion_list", [])
@@ -552,6 +578,7 @@ class ParcelGeneratorApp(QMainWindow):
         column_order_config = settings.get("column_order_config", {})
 
         self.pipeline_tab.set_config(pipeline_config)
+        self.sampling_tab.set_config(sampling_config)
         self.po_tab.set_config(po_config)
         self.exclusion_tab.set_config(exclusion_config)
         self.gridcode_tab.set_config(gridcode_config)
@@ -560,6 +587,7 @@ class ParcelGeneratorApp(QMainWindow):
         
         self._on_po_config_changed(self.po_tab.get_config())
         self._on_exclusions_changed(self.exclusion_tab.get_config())
+        self._on_sampling_config_changed(self.sampling_tab.get_config())
         self._on_gridcode_config_changed(self.gridcode_tab.get_config())
         self._on_delivery_config_changed(self.delivery_tab.get_config())
         
