@@ -320,5 +320,5 @@ Para soporte adicional:
 
 ---
 
-*Última actualización: Diciembre 2024*
+*Última actualización: Junio 2025*
 *Versión: Enhanced v1.1* 
