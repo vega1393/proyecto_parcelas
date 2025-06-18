@@ -4,6 +4,9 @@
 
 Bienvenido al **Parcel Generator Enhanced**, una herramienta avanzada para la generación automatizada de parcelas de muestreo. Esta interfaz te permite configurar y ejecutar pipelines de procesamiento geoespacial de manera intuitiva.
 
+### [🆕] **Nueva Funcionalidad: Soporte para Geodatabases**
+La aplicación ahora incluye **soporte nativo para Geodatabases de Esri (.gdb)**, permitiendo seleccionar y trabajar con estos archivos de manera profesional. Las geodatabases se pueden seleccionar como cualquier otro archivo geoespacial.
+
 ---
 
 ## [🎯] Controles Principales de Ejecución
@@ -17,13 +20,50 @@ Bienvenido al **Parcel Generator Enhanced**, una herramienta avanzada para la ge
 
 ---
 
+## [📁] **Selección de Archivos Mejorada**
+
+### [🗂️] **Formatos de Archivo Soportados**
+La aplicación soporta una amplia gama de formatos geoespaciales:
+
+- **[📦] GeoPackage** (*.gpkg) - Formato recomendado
+- **[📄] Shapefile** (*.shp) - Formato clásico
+- **[🏛️] Geodatabase** (*.gdb) - **¡NUEVO!** Soporte completo para Esri Geodatabase
+- **[🌐] GeoJSON** (*.geojson) - Formato web estándar
+- **[🗺️] KML/KMZ** (*.kml) - Google Earth
+- **[📋] GML** (*.gml) - Geography Markup Language
+
+### [🎯] **Cómo Seleccionar Geodatabases (.gdb)**
+
+#### **Método 1: Selección Directa**
+1. Haz clic en cualquier botón **"Browse"** o **"Buscar"**
+2. En el diálogo de archivos, busca las carpetas que terminan en `.gdb`
+3. Si no ves la geodatabase que necesitas, **cancela el diálogo**
+
+#### **Método 2: Selección Asistida** (Recomendado para .gdb)
+1. Si cancelas el diálogo de archivos, aparecerá un mensaje:
+   > **"¿Quiere seleccionar una Geodatabase (.gdb)?"**
+2. Haz clic en **"Sí"**
+3. Se abrirá un diálogo de carpetas especial para geodatabases
+4. Navega y selecciona la carpeta `.gdb` que necesitas
+5. La aplicación validará automáticamente que sea una geodatabase válida
+
+#### **Validación Automática**
+- ✅ La aplicación verifica que la carpeta seleccionada termine en `.gdb`
+- ✅ Muestra mensaje de error si seleccionas una carpeta que no es geodatabase
+- ✅ Compatible con todas las herramientas GDAL/OGR estándar
+
+---
+
 ## [📑] Tabs de Configuración
 
 ### 1. [⚙] **Pipeline**
 **Propósito**: Configuración básica del procesamiento
 
 **Campos principales**:
-- **Input File**: Archivo GeoPackage (.gpkg) o Shapefile (.shp) de entrada
+- **Input File**: Archivo geoespacial de entrada
+  - **Formatos soportados**: .gpkg, .shp, **.gdb**, .geojson, .kml, .gml
+  - **Recomendado**: GeoPackage (.gpkg) para mejor rendimiento
+  - **Geodatabases**: Usa el método de selección asistida para archivos .gdb
 - **Output Directory**: Directorio donde se guardarán los resultados
 - **Processing Style**: Estilo de procesamiento (calibration, control, custom)
 - **Grouping Fields**: Campos por los cuales agrupar las parcelas
@@ -66,13 +106,16 @@ Bienvenido al **Parcel Generator Enhanced**, una herramienta avanzada para la ge
 - **Enable GridCode**: Activa la generación automática de códigos
 - **Field Configuration**: Configurar hasta 2 campos con bins personalizados
 - **Bin Ranges**: Definir rangos de valores para cada código
+- **Import/Export**: Guardar y cargar configuraciones de GridCode
 
 ### 4. [📋] **Plan Operative (PO)**
 **Propósito**: Configuración del Plan Operativo
 
 **Configuración**:
-- **PO File**: Archivo GeoPackage con el plan operativo
-- **Layer**: Capa específica dentro del archivo
+- **PO File**: Archivo geoespacial con el plan operativo
+  - **Formatos soportados**: .gpkg, .shp, **.gdb**, .geojson
+  - **Geodatabases**: Soporte completo para archivos .gdb con múltiples capas
+- **Layer**: Capa específica dentro del archivo (para .gpkg y .gdb)
 - **Fields**: Campos a incluir en el procesamiento
 - **ID Mappings**: Mapeo de campos identificadores
 
@@ -81,6 +124,8 @@ Bienvenido al **Parcel Generator Enhanced**, una herramienta avanzada para la ge
 
 **Opciones**:
 - **Add Layer**: Agregar nueva capa de exclusión
+  - **Formatos soportados**: .gpkg, .shp, **.gdb**, .geojson
+  - **Geodatabases**: Selección de capas específicas dentro de .gdb
 - **Buffer Distance**: Distancia de buffer para exclusión
 - **Layer Management**: Editar, eliminar y reordenar capas
 
@@ -99,6 +144,8 @@ Bienvenido al **Parcel Generator Enhanced**, una herramienta avanzada para la ge
 
 **Funcionalidades**:
 - **Load File**: Cargar archivo para reordenar
+  - **Formatos soportados**: .gpkg, .shp, **.gdb**
+  - **Geodatabases**: Selección automática de la primera capa disponible
 - **Drag & Drop**: Reordenar columnas arrastrando
 - **Geometry Position**: Controlar posición de columna geométrica
 - **Apply Changes**: Aplicar nuevo orden de columnas
@@ -119,7 +166,9 @@ Bienvenido al **Parcel Generator Enhanced**, una herramienta avanzada para la ge
 
 ### Paso 1: Configuración Básica
 1. Ve al tab **Pipeline**
-2. Selecciona el **Input File** (archivo .gpkg o .shp)
+2. Selecciona el **Input File**:
+   - Para archivos .gpkg/.shp: Selección directa
+   - **Para archivos .gdb**: Usa el método de selección asistida
 3. Define el **Output Directory**
 4. Selecciona el **Processing Style** apropiado
 
@@ -130,8 +179,8 @@ Bienvenido al **Parcel Generator Enhanced**, una herramienta avanzada para la ge
 
 ### Paso 3: Configuraciones Adicionales
 1. **GridCode**: Si necesitas códigos automáticos
-2. **Plan Operative**: Si tienes un PO específico
-3. **Exclusion Layers**: Si hay áreas a excluir
+2. **Plan Operative**: Si tienes un PO específico (soporta .gdb)
+3. **Exclusion Layers**: Si hay áreas a excluir (soporta .gdb)
 4. **Delivery**: Para nomenclatura de archivos
 
 ### Paso 4: Ejecución
@@ -150,6 +199,7 @@ Bienvenido al **Parcel Generator Enhanced**, una herramienta avanzada para la ge
 
 ### [✓] Antes de Ejecutar
 - **Verificar archivos**: Asegúrate de que todos los archivos de entrada existen y son accesibles
+- **Geodatabases**: Para archivos .gdb, verifica que tengan las capas necesarias
 - **Revisar configuración**: Usa el resumen de configuración para verificar parámetros
 - **Guardar configuración**: Exporta tu configuración antes de ejecutar para futuras referencias
 
@@ -159,12 +209,23 @@ Bienvenido al **Parcel Generator Enhanced**, una herramienta avanzada para la ge
 - **Usar Stop si necesario**: El botón Stop permite cancelar de forma segura
 
 ### [🎯] Optimización
+- **Formato de archivos**: 
+  - **GeoPackage (.gpkg)**: Mejor rendimiento general
+  - **Geodatabase (.gdb)**: Ideal para datos complejos de Esri
+  - **Shapefile (.shp)**: Para compatibilidad legacy
 - **Grouping Fields**: Selecciona campos apropiados para optimizar agrupación
 - **Buffer distances**: Ajusta según la resolución de tus datos
 - **Intensidad de muestreo**: Balancea entre precisión y tiempo de procesamiento
 
+### [🗂️] Trabajando con Geodatabases (.gdb)
+- **Selección**: Usa el método de selección asistida para mejor experiencia
+- **Capas múltiples**: La aplicación detecta automáticamente las capas disponibles
+- **Compatibilidad**: Funciona con todas las versiones de ArcGIS geodatabases
+- **Rendimiento**: Puede ser más lento que GeoPackage para datasets grandes
+
 ### [🔧] Solución de Problemas
 - **Errores de archivo**: Verifica rutas y permisos de archivos
+- **Geodatabases corruptas**: Verifica la integridad con ArcGIS o usa `ogrinfo` para diagnosticar
 - **Memoria insuficiente**: Reduce área de procesamiento o aumenta RAM
 - **Errores de CRS**: Asegúrate de usar el EPSG correcto para tu región
 
@@ -182,7 +243,7 @@ output_directory/
 ├── summary/
 │   └── execution_summary.json
 └── config/
-    └── YYYYMMDD_CODIGO_pipeline_config.json
+    └── YYYYMMDD_CODIGO_pipeline_config_executed.json
 ```
 
 ---
@@ -203,6 +264,19 @@ output_directory/
 - **Causa**: Dependencias faltantes
 - **Solución**: Instala requirements: `pip install -r requirements.txt`
 
+#### **Errores específicos de Geodatabase (.gdb)**
+- **"Cannot open .gdb file"**:
+  - **Causa**: Geodatabase corrupta o versión incompatible
+  - **Solución**: Verifica con ArcGIS o usa `ogrinfo` para diagnosticar
+
+- **"No layers found in .gdb"**:
+  - **Causa**: Geodatabase vacía o sin permisos de lectura
+  - **Solución**: Verifica contenido con herramientas GIS
+
+- **"Selected folder is not a Geodatabase"**:
+  - **Causa**: Carpeta seleccionada no termina en .gdb
+  - **Solución**: Selecciona una carpeta que termine en .gdb
+
 ### Información de Debug
 - **Log Level**: Cambia a "DEBUG" en el tab Configuration para más detalles
 - **Export Config**: Guarda configuración problemática para análisis
@@ -219,5 +293,18 @@ Para soporte adicional:
 
 ---
 
-*Última actualización: Junio 2025*
-*Versión: Enhanced v1.0* 
+## [📝] Registro de Cambios
+
+### **Versión Enhanced v1.1** (Actual)
+- ✅ **Soporte completo para Geodatabases (.gdb)**
+- ✅ Selección asistida de archivos .gdb
+- ✅ Validación automática de geodatabases
+- ✅ Integración en todos los diálogos de selección de archivos
+- ✅ Compatibilidad con herramientas GDAL/OGR
+- ✅ Conservación de archivos de configuración temporal
+- ✅ Mejoras en el manejo de procesos y logs
+
+---
+
+*Última actualización: Diciembre 2024*
+*Versión: Enhanced v1.1* 

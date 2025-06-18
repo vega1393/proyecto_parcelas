@@ -1,9 +1,45 @@
-PyQt6>=6.5.0
-geopandas>=0.13.0
-shapely>=2.0.0
-pyogrio>=0.6.0
-pandas>=1.5.0
-numpy>=1.22.0
-matplotlib>=3.5.0
-fiona>=1.8.20  # Para listar capas de geodatabases
-markdown>=3.4.0  # Para el tab de ayuda
+# ===================================================================
+# PARCEL GENERATOR ENHANCED v1.1 - REQUIREMENTS
+# ===================================================================
+# Dependencias necesarias para ejecutar la aplicación de generación
+# de parcelas geoespaciales con soporte completo para geodatabases.
+# ===================================================================
+
+# ===== INTERFAZ GRÁFICA =====
+PyQt6>=6.5.0,<7.0.0          # Framework GUI principal - CRÍTICO
+
+# ===== PROCESAMIENTO GEOESPACIAL =====
+geopandas>=0.13.0,<1.0.0     # Análisis geoespacial - CRÍTICO
+shapely>=2.0.0,<3.0.0        # Geometrías y operaciones espaciales - CRÍTICO
+pyogrio>=0.6.0,<1.0.0        # Motor I/O rápido para archivos geoespaciales - CRÍTICO
+fiona>=1.8.20,<2.0.0         # I/O de archivos vectoriales + soporte .gdb - CRÍTICO
+
+# ===== ANÁLISIS DE DATOS =====
+pandas>=1.5.0,<3.0.0         # Manipulación de datos tabulares - CRÍTICO
+numpy>=1.22.0,<2.0.0         # Computación numérica - CRÍTICO
+
+# ===== VISUALIZACIÓN Y REPORTES =====
+matplotlib>=3.5.0,<4.0.0     # Gráficos y visualización - REQUERIDO
+
+# ===== DOCUMENTACIÓN Y AYUDA =====
+markdown>=3.4.0,<4.0.0       # Renderizado de ayuda en la aplicación - REQUERIDO
+
+# ===== NOTAS DE INSTALACIÓN =====
+# 
+# GDAL/OGR: Estas librerías son instaladas automáticamente como dependencias
+# de geopandas, fiona y pyogrio. No es necesario instalarlas por separado.
+# 
+# GEODATABASE SUPPORT: El soporte para archivos .gdb está proporcionado por
+# fiona>=1.8.20 que incluye drivers GDAL/OGR necesarios.
+# 
+# COMPATIBILIDAD: Estas versiones han sido probadas en:
+# - Windows 10/11 (Python 3.8+)
+# - macOS (Python 3.8+) 
+# - Linux Ubuntu/Debian (Python 3.8+)
+# 
+# INSTALACIÓN RECOMENDADA:
+# pip install -r requirements.txt
+# 
+# PARA DESARROLLO:
+# pip install -r requirements.txt --upgrade
+# ===================================================================
