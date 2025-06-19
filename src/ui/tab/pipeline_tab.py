@@ -150,7 +150,7 @@ class PipelineTab(QWidget):
         self.projected_crs_spin.setToolTip("EPSG code for the projected coordinate system (e.g., 31982 for SIRGAS 2000 UTM Zone 18S)")
         area_distance_layout.addRow("Projected CRS (EPSG):", self.projected_crs_spin)
         
-        self.min_area_value_spin = create_double_spinbox(0.01, 1000.0, 0.3, 0.01)
+        self.min_area_value_spin = create_double_spinbox(0.0, 1000.0, 0.3, 0.001)
         area_distance_layout.addRow("Min area (ha):", self.min_area_value_spin)
         
         self.buffer_value_spin = create_spinbox(-1000, 0, -20)

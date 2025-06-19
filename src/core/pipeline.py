@@ -274,6 +274,15 @@ def ejecutar_proceso(
             if count_col is None:
                 raise ValueError(f"El CSV debe contener una columna llamada 'n' o 'n_parcelas'. Columnas encontradas: {list(df_csv.columns)}")
             
+            # NUEVO: Manejar mapeo de gridcode del CSV si está especificado ANTES de verificar columnas
+            if gridcode_column_csv and gridcode_column_csv in df_csv.columns and 'gridcode' in grouping_cols:
+                logger.info(f"Usando columna '{gridcode_column_csv}' del CSV como gridcode")
+                # Renombrar la columna del CSV para que coincida con 'gridcode'
+                if gridcode_column_csv != 'gridcode':
+                    df_csv = df_csv.rename(columns={gridcode_column_csv: 'gridcode'})
+                    logger.debug(f"Columna '{gridcode_column_csv}' renombrada a 'gridcode' en el CSV")
+            
+            # Verificar que todas las columnas de agrupación existan después del mapeo
             for col in grouping_cols:
                 if col not in df_csv.columns: 
                     raise ValueError(f"Columna de agrupación '{col}' no encontrada en el CSV. Columnas disponibles: {list(df_csv.columns)}")
@@ -281,14 +290,6 @@ def ejecutar_proceso(
                     raise ValueError(f"Columna de agrupación '{col}' no encontrada en las áreas post-exclusión.")
 
             df_csv[count_col] = pd.to_numeric(df_csv[count_col], errors='coerce').fillna(0).astype(int)
-            
-            # NUEVO: Manejar mapeo de gridcode del CSV si está especificado
-            if gridcode_column_csv and gridcode_column_csv in df_csv.columns and 'gridcode' in grouping_cols:
-                logger.info(f"Usando columna '{gridcode_column_csv}' del CSV como gridcode")
-                # Renombrar la columna del CSV para que coincida con 'gridcode'
-                if gridcode_column_csv != 'gridcode':
-                    df_csv = df_csv.rename(columns={gridcode_column_csv: 'gridcode'})
-                    logger.debug(f"Columna '{gridcode_column_csv}' renombrada a 'gridcode' en el CSV")
             
             # Harmonizar tipos de datos para el merge
             for col in grouping_cols:

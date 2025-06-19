@@ -45,13 +45,13 @@ class DraggableListWidget(QListWidget):
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         
-        # Configurar scroll explícitamente
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)  # Siempre visible para prueba
+        # Configurar scroll nativo del QListWidget
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         self.setHorizontalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
         
-        # Permitir que el widget se expanda
+        # Política de tamaño para permitir scroll
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
     def dropEvent(self, event: QDropEvent) -> None:
@@ -79,6 +79,8 @@ class ColumnOrderTab(QWidget):
     def _init_ui(self) -> None:
         """Inicializa la interfaz de usuario del tab de ordenamiento de columnas."""
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(6)
         
         # Verificar disponibilidad de GeoPandas
         if not GEOPANDAS_AVAILABLE:
@@ -146,9 +148,12 @@ class ColumnOrderTab(QWidget):
             QSizePolicy.Policy.Expanding
         )  # Permitir que crezca
         columns_layout = QVBoxLayout(columns_group)
+        columns_layout.setContentsMargins(8, 8, 8, 8)
+        columns_layout.setSpacing(6)
         
         # Splitter para dividir la vista
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Lista de columnas disponibles (lado izquierdo)
         left_widget = QWidget()
@@ -213,11 +218,12 @@ class ColumnOrderTab(QWidget):
         
         left_layout.addLayout(selection_layout)
         
-        # Lista de columnas con scroll
+        # Lista de columnas con scroll nativo del QListWidget
         self.columns_list = DraggableListWidget(self)
         self.columns_list.setToolTip("Drag and drop to reorder columns\nCheck/uncheck to include/exclude columns")
-        self.columns_list.setMinimumHeight(300)  # Altura mínima
-        self.columns_list.setMaximumHeight(500)  # Altura máxima para forzar scroll
+        self.columns_list.setMinimumHeight(200)
+        self.columns_list.setMaximumHeight(250)  # Establecer altura máxima para forzar scroll
+        self.columns_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         left_layout.addWidget(self.columns_list)
         
         splitter.addWidget(left_widget)

@@ -1,6 +1,6 @@
 {
     "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E03_Metricas.gpkg",
-    "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/02_control_parcels/01_parcel_control_e03_20250618",
+    "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619",
     "style": "custom",
     "grouping_fields": [
         "tipouso",
@@ -10,13 +10,13 @@
     "cfg_overrides": {
         "PROJECTED_CRS": 31982,
         "AREA_MINIMA_HA": 0.01,
-        "BUFFER_DISTANCE": -30,
+        "BUFFER_DISTANCE": -15,
         "MIN_DISTANCE": 100.0,
         "ID_PARCELA_INICIO": 1,
         "VERSION_PARCELA": "A",
-        "MIN_PARCELAS_HABILITADO": true,
+        "MIN_PARCELAS_HABILITADO": false,
         "MIN_PARCELAS": 1,
-        "MAX_PARCELAS_HABILITADO": true,
+        "MAX_PARCELAS_HABILITADO": false,
         "MAX_PARCELAS": 20
     },
     "po_config": {
@@ -90,11 +90,11 @@
     },
     "delivery_config": {
         "delivery_code": "d03",
-        "parcel_id_suffix": "control",
-        "date_today": "20250618",
-        "date_formatted": "2025-06-18",
+        "parcel_id_suffix": "calibration",
+        "date_today": "20250619",
+        "date_formatted": "2025-06-19",
         "base_prefix": "br2025",
-        "custom_suffix": "control",
+        "custom_suffix": "calibration",
         "subdirectories": {
             "results": "results",
             "logs": "logs",
@@ -104,39 +104,41 @@
             "description": "Generaci\u00f3n de parcelas Brasil 2025",
             "version": "v01",
             "operator": "vega",
-            "timestamp": "2025-06-18T16:08:56.428946"
+            "timestamp": "2025-06-19T13:11:51.864426"
         }
     },
     "column_order_config": {
-        "file_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/02_control_parcels/01_parcel_control_e03_20250618\\results\\20250618_br2025_D03control_PARCELAS_FINALES.gpkg",
-        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/02_control_parcels/01_parcel_control_e03_20250618/results/20250618_br2025_D03control_PARCELAS_FINALES_ordenada.gpkg",
+        "file_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619\\results\\20250619_br2025_D03calibration_PARCELAS_FINALES.gpkg",
+        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619/results/20250619_br2025_D03calibration_PARCELAS_FINALES_ordenadas.gpkg",
         "create_backup": false,
         "geometry_first": false,
         "column_order": [
             "geom",
-            "id_parcel",
-            "predio",
-            "rodal",
-            "talhao",
-            "tipouso",
-            "tipomateri",
-            "anoplantac",
-            "mesplantac",
             "gridcode",
             "group_id",
+            "id_parcela",
+            "area_m2",
             "punto_x",
             "punto_y",
-            "area_m2"
+            "index",
+            "predio",
+            "rodal",
+            "anoplantac",
+            "talhao",
+            "mesplantac",
+            "tipouso",
+            "tipomateri",
+            "id_parcel"
         ]
     },
     "sampling_config": {
-        "use_csv": false,
-        "csv_path": null,
+        "use_csv": true,
+        "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E03_20250619.csv",
         "base_intensity": 55,
         "use_specific_intensity": false,
         "specific_intensities": {},
-        "count_column_csv": "",
-        "gridcode_column_csv": "",
+        "count_column_csv": "n",
+        "gridcode_column_csv": "gridcode2",
         "field_mappings": [
             [
                 "tipouso",
@@ -148,10 +150,10 @@
             ]
         ]
     },
-    "use_csv": false,
-    "csv_path": null,
-    "count_column_csv": "",
-    "gridcode_column_csv": "",
+    "use_csv": true,
+    "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E03_20250619.csv",
+    "count_column_csv": "n",
+    "gridcode_column_csv": "gridcode2",
     "field_mappings": [
         [
             "tipouso",

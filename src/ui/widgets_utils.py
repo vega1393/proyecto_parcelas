@@ -132,7 +132,7 @@ def create_default_presets() -> Dict[str, Dict[str, Any]]:
         "calibration": {
             "base_intensity": 80,
             "use_specific_intensity": True,
-            "min_area": 0.4,
+            "min_area": 0.0,
             "buffer_distance": -30,
             "min_distance": 80.0,
             "use_gridcode": True
@@ -140,7 +140,7 @@ def create_default_presets() -> Dict[str, Dict[str, Any]]:
         "control": {
             "base_intensity": 80,
             "use_specific_intensity": False,
-            "min_area": 0.4,
+            "min_area": 0.0,
             "buffer_distance": -30,
             "min_distance": 80.0,
             "use_gridcode": True,
@@ -150,7 +150,7 @@ def create_default_presets() -> Dict[str, Dict[str, Any]]:
         "custom": {
             "base_intensity": 50,
             "use_specific_intensity": True,
-            "min_area": 0.3,
+            "min_area": 0.0,
             "buffer_distance": -20,
             "min_distance": 60.0,
             "use_gridcode": False
