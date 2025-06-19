@@ -282,7 +282,7 @@ class SamplingTab(QWidget):
                 if available_fields:
                     return available_fields
         except Exception as e:
-            print(f"Error reading PO file for fields: {e}")
+                            pass  # Error silenciado - no crítico para la funcionalidad
         
         # Campos por defecto si no se pueden obtener dinámicamente
         return ["tipouso", "tipomateri", "predio", "rodal", "gridcode"]
@@ -309,7 +309,7 @@ class SamplingTab(QWidget):
                     if unique_values:
                         return unique_values
         except Exception as e:
-            print(f"Error reading PO file for field values '{field_name}': {e}")
+                            pass  # Error silenciado - no crítico para la funcionalidad
         
         # Valores típicos por campo como fallback
         field_values = {
@@ -330,7 +330,7 @@ class SamplingTab(QWidget):
                 df = pd.read_csv(csv_path, nrows=0)  # Solo headers
                 return list(df.columns)
         except Exception as e:
-            print(f"Error reading CSV fields: {e}")
+                            pass  # Error silenciado - no crítico para la funcionalidad
         
         # Campos por defecto si no se pueden obtener
         return ["tipouso", "tipomateri", "predio", "rodal"]
@@ -353,7 +353,7 @@ class SamplingTab(QWidget):
                             return po_file_path, po_layer
                         break
         except Exception as e:
-            print(f"Error getting PO file info: {e}")
+                            pass  # Error silenciado - no crítico para la funcionalidad
         
         return "", ""
 

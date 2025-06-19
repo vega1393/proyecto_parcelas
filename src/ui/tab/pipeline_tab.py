@@ -304,7 +304,7 @@ class PipelineTab(QWidget):
             config = get_config(style)
             self._load_style_configuration(config)
         except Exception as e:
-            print(f"Error loading style configuration: {e}")
+            pass  # Error silenciado - no crítico, usa valores por defecto
 
     def _toggle_config_summary(self, checked: bool) -> None:
         """Muestra u oculta el resumen de configuración."""

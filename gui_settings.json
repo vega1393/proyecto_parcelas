@@ -1,7 +1,7 @@
 {
     "pipeline_config": {
         "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E03_Metricas.gpkg",
-        "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/test2",
+        "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/test4",
         "style": "custom",
         "grouping_fields": [
             "tipouso",
@@ -125,7 +125,7 @@
             "description": "",
             "version": "",
             "operator": "",
-            "timestamp": "2025-06-19T16:01:28.901492"
+            "timestamp": "2025-06-19T16:21:38.302783"
         }
     },
     "column_order_config": {

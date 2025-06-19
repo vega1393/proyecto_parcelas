@@ -314,7 +314,6 @@ class ParcelGeneratorApp(QMainWindow):
                             self.process.readyReadStandardError.disconnect()
                         except Exception:
                             pass
-                        self.process.deleteLater()
                         self.process = None
                         
                     self.process = QProcess(self)
@@ -353,10 +352,6 @@ class ParcelGeneratorApp(QMainWindow):
                     self.log_text.append(f"[ERROR] Failed to start pipeline process: {e}")
                     QMessageBox.critical(self, "Process Error", f"Failed to start pipeline:\n{e}")
                     self._set_running_state(is_running=False)
-                    if self.process:
-                        self.process.deleteLater()
-                        self.process = None
-                    return
                     
             except Exception as e:
                 self.log_text.append(f"[ERROR] Failed to create temporary config: {e}")

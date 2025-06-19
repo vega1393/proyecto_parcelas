@@ -26,14 +26,8 @@ try:
     GEOPANDAS_AVAILABLE = True
     GDAL_AVAILABLE = True
 except ImportError:
-    try:
-        import geopandas as gpd
-        import pyogrio
-        GEOPANDAS_AVAILABLE = True
-        GDAL_AVAILABLE = False
-    except ImportError:
-        GEOPANDAS_AVAILABLE = False
-        GDAL_AVAILABLE = False
+    GEOPANDAS_AVAILABLE = False
+    GDAL_AVAILABLE = False
 
 
 class DraggableListWidget(QListWidget):
@@ -369,7 +363,7 @@ class ColumnOrderTab(QWidget):
             return info
             
         except Exception as e:
-            print(f"Error reading GPKG with GDAL: {e}")
+            pass  # Error silenciado - se usa fallback
             return None
 
     def _get_columns_with_gdal(self, file_path: str, layer_name: str = None) -> List[str]:
@@ -409,7 +403,7 @@ class ColumnOrderTab(QWidget):
             return columns
             
         except Exception as e:
-            print(f"Error getting columns with GDAL: {e}")
+            pass  # Error silenciado - se usa fallback
             return []
 
     def _update_ui_state(self) -> None:
@@ -835,7 +829,7 @@ class ColumnOrderTab(QWidget):
                                 # Filtrar solo columnas que existen
                                 columns = [col for col in columns if col in real_columns]
                     except Exception as e:
-                        print(f"GDAL verification failed: {e}")
+                        pass  # Error silenciado - se usa fallback
                 
                 # Cargar archivo con GeoPandas
                 if self._current_file_path.lower().endswith('.gpkg') and hasattr(self, '_current_layer'):
