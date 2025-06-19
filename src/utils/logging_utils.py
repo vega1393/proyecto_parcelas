@@ -47,7 +47,6 @@ def setup_logging(log_file: str, level: int = logging.INFO, use_queue: bool = Tr
     # Lee el nivel de log desde la variable de entorno LOG_LEVEL si está presente
     log_level_env = os.environ.get("LOG_LEVEL", None)
     if log_level_env:
-        import logging
         level = getattr(logging, log_level_env.upper(), logging.INFO)
     # Remove all handlers first
     for handler in logging.root.handlers[:]:

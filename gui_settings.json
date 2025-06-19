@@ -1,23 +1,44 @@
 {
-    "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E03_Metricas.gpkg",
-    "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619",
-    "style": "custom",
-    "grouping_fields": [
-        "tipouso",
-        "tipomateri",
-        "gridcode"
-    ],
-    "cfg_overrides": {
-        "PROJECTED_CRS": 31982,
-        "AREA_MINIMA_HA": 0.01,
-        "BUFFER_DISTANCE": -15,
-        "MIN_DISTANCE": 100.0,
-        "ID_PARCELA_INICIO": 1,
-        "VERSION_PARCELA": "A",
-        "MIN_PARCELAS_HABILITADO": false,
-        "MIN_PARCELAS": 1,
-        "MAX_PARCELAS_HABILITADO": false,
-        "MAX_PARCELAS": 20
+    "pipeline_config": {
+        "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E03_Metricas.gpkg",
+        "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/test2",
+        "style": "custom",
+        "grouping_fields": [
+            "tipouso",
+            "tipomateri",
+            "gridcode"
+        ],
+        "cfg_overrides": {
+            "PROJECTED_CRS": 31982,
+            "AREA_MINIMA_HA": 0.01,
+            "BUFFER_DISTANCE": -20,
+            "MIN_DISTANCE": 60.0,
+            "ID_PARCELA_INICIO": 1,
+            "VERSION_PARCELA": "",
+            "MIN_PARCELAS_HABILITADO": false,
+            "MIN_PARCELAS": 1,
+            "MAX_PARCELAS_HABILITADO": false,
+            "MAX_PARCELAS": 10
+        }
+    },
+    "sampling_config": {
+        "use_csv": true,
+        "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E03_20250619.csv",
+        "base_intensity": 55,
+        "use_specific_intensity": false,
+        "specific_intensities": {},
+        "count_column_csv": "n",
+        "gridcode_column_csv": "gridcode2",
+        "field_mappings": [
+            [
+                "tipouso",
+                "tipouso"
+            ],
+            [
+                "tipomateri",
+                "tipomateri"
+            ]
+        ]
     },
     "po_config": {
         "ruta": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/01_po/01_po_from_arauco/po_brasil_2025_v04_usoabril.gpkg",
@@ -36,7 +57,7 @@
             "tipo": "tipouso"
         }
     },
-    "exclusion_list": [],
+    "exclusion_config": [],
     "gridcode_config": {
         "enabled": true,
         "gridcode_params": {
@@ -62,26 +83,26 @@
                 "field": "p95",
                 "bins": [
                     {
-                        "max": 12.0,
+                        "max": 10.0,
                         "id": 1
                     },
                     {
-                        "min": 12.0,
-                        "max": 16.0,
+                        "min": 10.0,
+                        "max": 14.0,
                         "id": 2
                     },
                     {
-                        "min": 16.0,
-                        "max": 20.0,
+                        "min": 14.0,
+                        "max": 18.0,
                         "id": 3
                     },
                     {
-                        "min": 20.0,
-                        "max": 24.0,
+                        "min": 18.0,
+                        "max": 22.0,
                         "id": 4
                     },
                     {
-                        "min": 24.0,
+                        "min": 22.0,
                         "id": 5
                     }
                 ]
@@ -93,23 +114,23 @@
         "parcel_id_suffix": "calibration",
         "date_today": "20250619",
         "date_formatted": "2025-06-19",
-        "base_prefix": "br2025",
-        "custom_suffix": "calibration",
+        "base_prefix": "",
+        "custom_suffix": "",
         "subdirectories": {
             "results": "results",
             "logs": "logs",
             "summary": "summary"
         },
         "metadata": {
-            "description": "Generaci\u00f3n de parcelas Brasil 2025",
-            "version": "v01",
-            "operator": "vega",
-            "timestamp": "2025-06-19T13:11:51.864426"
+            "description": "",
+            "version": "",
+            "operator": "",
+            "timestamp": "2025-06-19T16:01:28.901492"
         }
     },
     "column_order_config": {
         "file_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619\\results\\20250619_br2025_D03calibration_PARCELAS_FINALES.gpkg",
-        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619/results/20250619_br2025_D03calibration_PARCELAS_FINALES_ordenadas.gpkg",
+        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619_v2/results/20250619_d03_plots.gpkg",
         "create_backup": false,
         "geometry_first": false,
         "column_order": [
@@ -131,43 +152,5 @@
             "id_parcel"
         ]
     },
-    "sampling_config": {
-        "use_csv": true,
-        "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E03_20250619.csv",
-        "base_intensity": 55,
-        "use_specific_intensity": false,
-        "specific_intensities": {},
-        "count_column_csv": "n",
-        "gridcode_column_csv": "gridcode2",
-        "field_mappings": [
-            [
-                "tipouso",
-                "tipouso"
-            ],
-            [
-                "tipomateri",
-                "tipomateri"
-            ]
-        ]
-    },
-    "use_csv": true,
-    "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E03_20250619.csv",
-    "count_column_csv": "n",
-    "gridcode_column_csv": "gridcode2",
-    "field_mappings": [
-        [
-            "tipouso",
-            "tipouso"
-        ],
-        [
-            "tipomateri",
-            "tipomateri"
-        ]
-    ],
-    "base_intensity": 55,
-    "use_specific_intensity": false,
-    "specific_intensities": {},
-    "custom_params": {
-        "intensity": 55
-    }
+    "ui_log_level": "INFO"
 }

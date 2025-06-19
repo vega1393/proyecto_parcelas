@@ -14,13 +14,23 @@ def main():
     Punto de entrada principal para ejecutar el pipeline desde la línea de comandos.
     Todo el código se mueve aquí para ser seguro con multiprocessing.
     """
-    print("[DEBUG] INICIO DEL PROCESO PRINCIPAL DE RUN_PIPELINE")
+    
+    # Configurar logging condicional basado en variable de entorno
+    pipeline_log_level = os.environ.get("PIPELINE_LOG_LEVEL", "INFO")
+    
+    # Función helper para logging condicional
+    def debug_print(message):
+        """Solo imprime mensajes DEBUG si el nivel de logging lo permite."""
+        if pipeline_log_level == "DEBUG":
+            print(f"[DEBUG] {message}")
+    
+    debug_print("INICIO DEL PROCESO PRINCIPAL DE RUN_PIPELINE")
 
     # Mover las importaciones que son parte de la lógica aquí dentro
     try:
         from src.core.pipeline import ejecutar_proceso
         from src.utils.logging_utils import setup_logging
-        print("[DEBUG] Módulos del pipeline importados correctamente.")
+        debug_print("Módulos del pipeline importados correctamente.")
     except ImportError as e:
         # Este es un error crítico, lo reportamos en JSON y salimos
         error_message = f"Fallo crítico durante la importación inicial en run_pipeline.py: {e}"
@@ -34,7 +44,7 @@ def main():
         sys.exit(1)
 
     config_path = sys.argv[1]
-    print(f"[DEBUG] Ruta de configuración recibida: {config_path}")
+    debug_print(f"Ruta de configuración recibida: {config_path}")
 
     if not os.path.exists(config_path):
         error_msg = f"Archivo de configuración no encontrado: {config_path}"
@@ -45,7 +55,8 @@ def main():
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
-        print("[DEBUG] Configuración JSON cargada.")
+        debug_print("Configuración JSON cargada.")
+        
     except Exception as e:
         error_msg = f"Error cargando configuración JSON: {e}"
         print(json.dumps({"type": "error", "message": error_msg}), flush=True)
@@ -56,18 +67,18 @@ def main():
         print(json.dumps({"type": "progress", "value": value, "status": status}), flush=True)
 
     try:
-        print("[DEBUG] Llamando a ejecutar_proceso...")
+        debug_print("Llamando a ejecutar_proceso...")
         
         # Extraer delivery config si está presente
-        delivery_config = config.get('delivery_config')
+        delivery_config = config.get('DELIVERY_CONFIG')
         if delivery_config:
-            print(f"[DEBUG] Delivery config extracted: {delivery_config}")
+            debug_print(f"Delivery config extracted: {delivery_config}")
         
         resultados = ejecutar_proceso(
             input_path=config["input_path"],
             output_dir=config.get("output_dir"),
             entrega=config.get("entrega"),
-            estilo=config.get("estilo", "calibracion"),
+            estilo=config.get("style", "calibration"),
             cfg_overrides=config.get("cfg_overrides", {}),
             progress_callback=progress_callback,
             use_csv=config.get("use_csv", False),

@@ -243,11 +243,11 @@ class GridCodeTab(QWidget):
     def _load_p95_preset(self) -> None:
         """Carga preset para altura (P95)."""
         bins_data = [
-            {"min": "", "max": "12", "id": "1"},
-            {"min": "12", "max": "16", "id": "2"},
-            {"min": "16", "max": "20", "id": "3"},
-            {"min": "20", "max": "24", "id": "4"},
-            {"min": "24", "max": "", "id": "5"}
+            {"min": "", "max": "10", "id": "1"},
+            {"min": "10", "max": "14", "id": "2"},
+            {"min": "14", "max": "18", "id": "3"},
+            {"min": "18", "max": "22", "id": "4"},
+            {"min": "22", "max": "", "id": "5"}
         ]
         self._populate_table_with_data(self.field2_table, bins_data)
         self.field2_name_line.setText("p95")

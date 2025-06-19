@@ -383,10 +383,31 @@ class POLandUseDialog(QDialog):
     def _cleanup_thread(self):
         """Clean up the background loading thread."""
         if hasattr(self, 'loader_thread') and self.loader_thread is not None:
-            if self.loader_thread.isRunning():
-                self.loader_thread.quit()
-                self.loader_thread.wait(1000)  # Wait up to 1 second
-            self.loader_thread = None
+            try:
+                # Desconectar señales primero
+                try:
+                    self.loader_thread.dataLoaded.disconnect()
+                    self.loader_thread.progressUpdated.disconnect()
+                except Exception:
+                    pass  # Ignorar si ya fueron desconectadas
+                
+                if self.loader_thread.isRunning():
+                    self.loader_thread.quit()
+                    if not self.loader_thread.wait(1000):  # Wait up to 1 second
+                        # Si no termina en 1 segundo, forzar terminación
+                        self.loader_thread.terminate()
+                        self.loader_thread.wait(500)  # Esperar máximo 0.5s más
+                
+                # Limpiar referencia
+                self.loader_thread = None
+                
+            except Exception as e:
+                # En caso de error, forzar limpieza
+                try:
+                    if hasattr(self, 'loader_thread'):
+                        self.loader_thread = None
+                except Exception:
+                    pass  # Ignorar errores finales
     
     def closeEvent(self, event):
         """Handle dialog close event."""
