@@ -453,14 +453,57 @@ def ejecutar_proceso(
 
         if resultados.get('gdf_inicial') is not None:
             report_progress(95, "Analizando pérdidas...")
-            analisis_df = analizar_perdidas_parcelas(
-                gdf_inicial=resultados['gdf_inicial'], fields=grouping_cols,
-                gdf_post_filtros=resultados.get('gdf_post_filtros'),
-                gdf_post_exclusion=resultados.get('gdf_post_exclusion'),
-                gdf_final=resultados.get('gdf_final'),
-                output_csv=rutas['csv_analisis']
-            )
-            resultados['analisis'] = analisis_df
+            
+            # Usar análisis mejorado si hay CSV original disponible
+            if use_csv and csv_path and os.path.exists(csv_path):
+                from src.pipeline.analisis import analizar_perdidas_con_csv
+                
+                # Cargar CSV original para análisis
+                df_csv_original = pd.read_csv(csv_path)
+                df_csv_original.columns = [c.lower() for c in df_csv_original.columns]
+                
+                # Determinar columna de conteo
+                count_col = 'n_parcelas' if 'n_parcelas' in df_csv_original.columns else ('n' if 'n' in df_csv_original.columns else None)
+                
+                if count_col:
+                    # Mapear gridcode si es necesario
+                    if gridcode_column_csv and gridcode_column_csv in df_csv_original.columns and 'gridcode' in grouping_cols:
+                        if gridcode_column_csv != 'gridcode':
+                            df_csv_original = df_csv_original.rename(columns={gridcode_column_csv: 'gridcode'})
+                    
+                    logger.info("Usando análisis de pérdidas mejorado con comparación CSV original...")
+                    analisis_df = analizar_perdidas_con_csv(
+                        csv_original=df_csv_original,
+                        csv_grouping_cols=grouping_cols,
+                        csv_count_col=count_col,
+                        gdf_inicial=resultados['gdf_inicial'], 
+                        fields=grouping_cols,
+                        gdf_post_filtros=resultados.get('gdf_post_filtros'),
+                        gdf_post_exclusion=resultados.get('gdf_post_exclusion'),
+                        gdf_final=resultados.get('gdf_final'),
+                        output_csv=rutas['csv_analisis']
+                    )
+                    resultados['analisis'] = analisis_df
+                else:
+                    logger.warning("No se encontró columna de conteo en CSV, usando análisis estándar...")
+                    analisis_df = analizar_perdidas_parcelas(
+                        gdf_inicial=resultados['gdf_inicial'], fields=grouping_cols,
+                        gdf_post_filtros=resultados.get('gdf_post_filtros'),
+                        gdf_post_exclusion=resultados.get('gdf_post_exclusion'),
+                        gdf_final=resultados.get('gdf_final'),
+                        output_csv=rutas['csv_analisis']
+                    )
+                    resultados['analisis'] = analisis_df
+            else:
+                # Usar análisis estándar si no hay CSV
+                analisis_df = analizar_perdidas_parcelas(
+                    gdf_inicial=resultados['gdf_inicial'], fields=grouping_cols,
+                    gdf_post_filtros=resultados.get('gdf_post_filtros'),
+                    gdf_post_exclusion=resultados.get('gdf_post_exclusion'),
+                    gdf_final=resultados.get('gdf_final'),
+                    output_csv=rutas['csv_analisis']
+                )
+                resultados['analisis'] = analisis_df
 
         report_progress(100, "Proceso completado con éxito!")
         logging.info("=== Proceso completado con éxito ===")

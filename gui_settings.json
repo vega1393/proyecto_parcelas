@@ -1,7 +1,7 @@
 {
     "pipeline_config": {
         "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E04_Metricas.gpkg",
-        "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627",
+        "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627_v2",
         "style": "custom",
         "grouping_fields": [
             "tipouso",
@@ -10,7 +10,7 @@
         ],
         "cfg_overrides": {
             "PROJECTED_CRS": 31982,
-            "AREA_MINIMA_HA": 0.01,
+            "AREA_MINIMA_HA": 0.008,
             "BUFFER_DISTANCE": -20,
             "MIN_DISTANCE": 60.0,
             "ID_PARCELA_INICIO": 1,
@@ -125,15 +125,30 @@
             "description": "",
             "version": "",
             "operator": "",
-            "timestamp": "2025-06-27T08:24:08.154879"
+            "timestamp": "2025-06-27T09:12:22.766334"
         }
     },
     "column_order_config": {
-        "file_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619\\results\\20250619_br2025_D03calibration_PARCELAS_FINALES.gpkg",
-        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619_v2/results/20250619_d03_plots.gpkg",
+        "file_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627/results/20250617_D01_PARCELAS_FINALES.gpkg",
+        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627/results/20250617_D04_PARCELAS_FINALES_ordenados.gpkg",
         "create_backup": false,
         "geometry_first": false,
-        "column_order": []
+        "column_order": [
+            "geom",
+            "id_parcel",
+            "predio",
+            "rodal",
+            "talhao",
+            "tipouso",
+            "tipomateri",
+            "anoplantac",
+            "mesplantac",
+            "gridcode",
+            "group_id",
+            "punto_x",
+            "punto_y",
+            "area_m2"
+        ]
     },
     "ui_log_level": "INFO"
 }

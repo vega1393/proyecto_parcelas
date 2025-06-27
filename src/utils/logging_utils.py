@@ -24,7 +24,8 @@ class JsonStdoutHandler(logging.Handler):
                 "message": self.format(record),
                 "logger": record.name
             }
-            print(json.dumps(log_entry), flush=True)
+            # Usar ensure_ascii=False para permitir Unicode/emoticonos
+            print(json.dumps(log_entry, ensure_ascii=False), flush=True)
         except Exception:
             self.handleError(record)
 
@@ -51,9 +52,22 @@ def setup_logging(log_file: str, level: int = logging.INFO, use_queue: bool = Tr
     # Remove all handlers first
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
+    # Configurar handlers con encoding UTF-8 para soportar emoticonos
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    
+    # Configurar StreamHandler con encoding UTF-8
+    stream_handler = logging.StreamHandler(sys.stdout)
+    if hasattr(stream_handler.stream, 'reconfigure'):
+        # Python 3.7+ - reconfigurar encoding
+        try:
+            stream_handler.stream.reconfigure(encoding='utf-8')
+        except:
+            # Fallback si reconfigure falla
+            pass
+    
     handlers = [
-        logging.FileHandler(log_file),
-        logging.StreamHandler(sys.stdout),
+        file_handler,
+        stream_handler,
         JsonStdoutHandler()
     ]
     if use_queue:
@@ -65,11 +79,12 @@ def setup_logging(log_file: str, level: int = logging.INFO, use_queue: bool = Tr
         _queue_listener = QueueListener(_queue, *handlers, respect_handler_level=True)
         _queue_listener.start()
     else:
-        logging.basicConfig(
-            level=level,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=handlers
-        )
+        # Configurar logging con handlers que soportan UTF-8
+        for handler in handlers:
+            handler.setLevel(level)
+            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logging.root.addHandler(handler)
     logging.getLogger().setLevel(level)
     logging.info(f"Logging configured. Log file: {log_file}")
 
