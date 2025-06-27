@@ -1,7 +1,7 @@
 {
     "pipeline_config": {
-        "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E03_Metricas.gpkg",
-        "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/test4",
+        "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E04_Metricas.gpkg",
+        "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627",
         "style": "custom",
         "grouping_fields": [
             "tipouso",
@@ -23,7 +23,7 @@
     },
     "sampling_config": {
         "use_csv": true,
-        "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E03_20250619.csv",
+        "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E04_20250625.csv",
         "base_intensity": 55,
         "use_specific_intensity": false,
         "specific_intensities": {},
@@ -70,11 +70,11 @@
                     },
                     {
                         "min": 50.0,
-                        "max": 70.0,
+                        "max": 75.0,
                         "id": 2
                     },
                     {
-                        "min": 70.0,
+                        "min": 75.0,
                         "id": 3
                     }
                 ]
@@ -83,26 +83,26 @@
                 "field": "p95",
                 "bins": [
                     {
-                        "max": 10.0,
+                        "max": 8.0,
                         "id": 1
                     },
                     {
-                        "min": 10.0,
-                        "max": 14.0,
+                        "min": 8.0,
+                        "max": 12.0,
                         "id": 2
                     },
                     {
-                        "min": 14.0,
-                        "max": 18.0,
+                        "min": 12.0,
+                        "max": 16.0,
                         "id": 3
                     },
                     {
-                        "min": 18.0,
-                        "max": 22.0,
+                        "min": 16.0,
+                        "max": 20.0,
                         "id": 4
                     },
                     {
-                        "min": 22.0,
+                        "min": 20.0,
                         "id": 5
                     }
                 ]
@@ -110,10 +110,10 @@
         }
     },
     "delivery_config": {
-        "delivery_code": "d03",
+        "delivery_code": "d04",
         "parcel_id_suffix": "calibration",
-        "date_today": "20250619",
-        "date_formatted": "2025-06-19",
+        "date_today": "20250627",
+        "date_formatted": "2025-06-27",
         "base_prefix": "",
         "custom_suffix": "",
         "subdirectories": {
@@ -125,7 +125,7 @@
             "description": "",
             "version": "",
             "operator": "",
-            "timestamp": "2025-06-19T16:21:38.302783"
+            "timestamp": "2025-06-27T08:24:08.154879"
         }
     },
     "column_order_config": {
@@ -133,24 +133,7 @@
         "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/03_parcel_calibration_e03_20250619_v2/results/20250619_d03_plots.gpkg",
         "create_backup": false,
         "geometry_first": false,
-        "column_order": [
-            "geom",
-            "gridcode",
-            "group_id",
-            "id_parcela",
-            "area_m2",
-            "punto_x",
-            "punto_y",
-            "index",
-            "predio",
-            "rodal",
-            "anoplantac",
-            "talhao",
-            "mesplantac",
-            "tipouso",
-            "tipomateri",
-            "id_parcel"
-        ]
+        "column_order": []
     },
     "ui_log_level": "INFO"
 }

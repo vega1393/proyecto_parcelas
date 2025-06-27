@@ -70,7 +70,7 @@ def main():
         debug_print("Llamando a ejecutar_proceso...")
         
         # Extraer delivery config si está presente
-        delivery_config = config.get('DELIVERY_CONFIG')
+        delivery_config = config.get('delivery_config')
         if delivery_config:
             debug_print(f"Delivery config extracted: {delivery_config}")
         
