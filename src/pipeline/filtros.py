@@ -120,8 +120,18 @@ def calcular_gridcode(
         field1_config = gridcode_params["field1"]
         field2_config = gridcode_params["field2"]
         
-        field1_name = field1_config.get("field", "cov")
-        field2_name = field2_config.get("field", "p95")
+        # Usa el nombre de campo de la configuración, o el mapeado dinámicamente
+        field1_name = field1_config.get("field", campos_metricas.get("cov"))
+        field2_name = field2_config.get("field", campos_metricas.get("p95"))
+        
+        # Validar que los campos existen
+        if not field1_name or field1_name not in gdf.columns:
+            logger.error(f"El campo para el gridcode '{field1_name}' (mapeado de 'cov') no existe en los datos.")
+            raise KeyError(f"Campo de gridcode '{field1_name}' no encontrado. Campos disponibles: {gdf.columns.tolist()}")
+        if not field2_name or field2_name not in gdf.columns:
+            logger.error(f"El campo para el gridcode '{field2_name}' (mapeado de 'p95') no existe en los datos.")
+            raise KeyError(f"Campo de gridcode '{field2_name}' no encontrado. Campos disponibles: {gdf.columns.tolist()}")
+
         field1_bins = field1_config.get("bins", [])
         field2_bins = field2_config.get("bins", [])
         
@@ -191,19 +201,26 @@ def calcular_gridcode(
         gdf['gridcode'] = gdf.apply(_calc_code_dynamic, axis=1)
         
     else:
-        # Fallback: usar configuración hardcodeada (LEGACY)
+        # Fallback: usar configuración hardcodeada (LEGACY) - Ahora usa los campos dinámicos
         logger.warning("GRIDCODE_PARAMS no disponible. Usando configuración hardcodeada (LEGACY)")
         logger.warning("ADVERTENCIA: Esta configuración puede no coincidir con gui_settings.json")
         
-        cov_field = campos_metricas.get("cov", "cov")
-        p95_field = campos_metricas.get("p95", "p95")
-        
-        logger.info(f"Usando campos legacy: cov='{cov_field}', p95='{p95_field}'")
+        cov_field = campos_metricas.get("cov")
+        p95_field = campos_metricas.get("p95")
 
+        if not cov_field or cov_field not in gdf.columns:
+            logger.error(f"El campo para el gridcode '{cov_field}' (mapeado de 'cov') no existe en los datos.")
+            raise KeyError(f"Campo de gridcode '{cov_field}' no encontrado. Campos disponibles: {gdf.columns.tolist()}")
+        if not p95_field or p95_field not in gdf.columns:
+            logger.error(f"El campo para el gridcode '{p95_field}' (mapeado de 'p95') no existe en los datos.")
+            raise KeyError(f"Campo de gridcode '{p95_field}' no encontrado. Campos disponibles: {gdf.columns.tolist()}")
+
+        logger.info(f"Usando campo '{cov_field}' para cobertura y '{p95_field}' para altura.")
+        
         def _calc_code_legacy(row):
-            """Función legacy con valores hardcodeados."""
-            cov = row.get(cov_field, 0)
-            p95 = row.get(p95_field, 0)
+            """Calcula gridcode usando configuración de fallback (legacy)."""
+            cov = row[cov_field]
+            p95 = row[p95_field]
             
             # Determinar cov_id (VALORES HARDCODEADOS - LEGACY)
             if 0 <= cov <= 30:

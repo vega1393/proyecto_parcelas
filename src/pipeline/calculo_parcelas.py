@@ -6,7 +6,8 @@ import logging
 import geopandas as gpd
 import pandas as pd
 import pyogrio
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
+from .distribucion_total import calcular_distribucion_proporcional
 
 logger = logging.getLogger(__name__)
 
@@ -23,154 +24,168 @@ def calcular_cantidad_de_parcelas(
     buffer_distance: int,
     output_csv: Optional[str] = None,
     output_gpkg: Optional[str] = None,
-    output_gpkg_dissolved_initial: Optional[str] = None
-) -> gpd.GeoDataFrame:
+    output_gpkg_dissolved_initial: Optional[str] = None,
+    # Nuevos parámetros para total-based
+    use_total_based: bool = False,
+    total_parcels: Optional[int] = None,
+    minimum_config: Optional[Dict[str, Any]] = None,
+    campos_metricas: Optional[Dict[str, str]] = None,
+    use_original_area: bool = True  # DEPRECATED en la lógica, se mantiene por firma
+) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
-    Calcula la cantidad de parcelas necesarias por grupo, manejando de forma
-    robusta los datos de entrada antes de agrupar.
+    Calcula la cantidad de parcelas necesarias por grupo.
+    REFACTORIZADO (v2): La lógica ahora aplica filtros y buffer ANTES de
+    distribuir las parcelas para máxima precisión.
     
     Args:
         gdf: GeoDataFrame con los datos a procesar.
         fields: Lista de campos para agrupar.
-        ... (resto de los argumentos) ...
+        intensidad: Intensidad base (hectáreas por parcela).
+        use_intensidad_especifica: Si usar intensidades específicas por campo.
+        intensidad_por_campo: Diccionario con intensidades específicas.
+        min_parcelas: Número mínimo de parcelas por grupo.
+        max_parcelas: Número máximo de parcelas por grupo.
+        area_minima_ha: Área mínima en hectáreas para incluir un grupo.
+        buffer_distance: Distancia de buffer en metros.
+        output_csv: Ruta para guardar CSV de resultados.
+        output_gpkg: Ruta para guardar GPKG final.
+        output_gpkg_dissolved_initial: Ruta para guardar GPKG de diagnóstico.
+        use_total_based: Si usar distribución proporcional total.
+        total_parcels: Número total de parcelas a distribuir (solo total-based).
+        minimum_config: Configuración de mínimo por grupo (solo total-based).
+        campos_metricas: Diccionario con nombres de campos para cálculos específicos.
+        use_original_area: (Ignorado) Se mantiene por compatibilidad.
         
     Returns:
-        GeoDataFrame con la cantidad de parcelas calculada.
+        Tuple con dos GeoDataFrames: el primero es el resultado final y el segundo es la copia inicial antes de aplicar los filtros.
     """
-    logger.info("Iniciando cálculo de cantidad de parcelas...")
+    logger.info("Iniciando cálculo de cantidad de parcelas (lógica V2: Filtros->Buffer->Distribución)...")
 
-    # 1) Validar y preparar columnas de agrupación
+    # --- PASO 1: Validación y limpieza de columnas de agrupación ---
     available_cols = [col for col in fields if col in gdf.columns]
-    missing_cols = set(fields) - set(available_cols)
-    if missing_cols:
-        logger.warning(f"Las siguientes columnas de agrupación no se encontraron y serán ignoradas: {list(missing_cols)}")
-
     if not available_cols:
-        logger.error("No se especificaron columnas de agrupación válidas. No se puede continuar con el cálculo.")
-        return gpd.GeoDataFrame() # Devolver GDF vacío si no hay por qué agrupar
-
+        logger.error("No se especificaron columnas de agrupación válidas. No se puede continuar.")
+        return gpd.GeoDataFrame(), gpd.GeoDataFrame()
     group_cols = available_cols
-
-    # Copia de seguridad para no modificar el GeoDataFrame original que se usa en otros pasos
-    gdf_cleaned = gdf.copy()
-
-    # 2) [CORRECCIÓN CLAVE] Limpiar los datos ANTES de agrupar.
-    #    Esto previene errores en `dissolve` si hay valores nulos (NaN).
-    logger.info(f"Limpiando y preparando columnas de agrupación para dissolve: {group_cols}")
+    
+    gdf_processed = gdf.copy()
+    logger.info(f"Limpiando columnas de agrupación: {group_cols}")
     for col in group_cols:
-        # La forma más segura es convertir toda la columna a string para asegurar un tipo de dato
-        # consistente y luego rellenar los nulos. Así, `NaN` se convierte en un grupo más.
-        if pd.api.types.is_numeric_dtype(gdf_cleaned[col]):
-            # Para numéricos, rellenar con un valor que no interfiera.
-            gdf_cleaned[col] = gdf_cleaned[col].fillna(-9999)
+        if pd.api.types.is_numeric_dtype(gdf_processed[col]):
+            gdf_processed[col] = gdf_processed[col].fillna(-9999)
         else:
-            # Para texto u otros, rellenar con 'N/A'.
-            gdf_cleaned[col] = gdf_cleaned[col].fillna('N/A')
+            gdf_processed[col] = gdf_processed[col].fillna('N/A')
 
-    # 3) Primer `dissolve` con los datos ya limpios
-    logger.info("Realizando primer dissolve para cálculo de n_parcelas...")
-    dissolved_initial = gdf_cleaned.dissolve(by=group_cols, as_index=False)
-    dissolved_initial['area_m2'] = dissolved_initial.geometry.area
-    dissolved_initial['area_ha'] = dissolved_initial['area_m2'] / 10_000
+    # --- PASO 2: Filtrado de calidad de píxeles ---
+    logger.info(f"Registros antes de filtrar por calidad de píxeles: {len(gdf_processed)}")
+    gdf_processed['area_m2_pixel'] = gdf_processed.geometry.area
+    gdf_filtered_pixels = gdf_processed[gdf_processed['area_m2_pixel'] >= 399].copy()
+    logger.info(f"Registros después de filtrar <399 m2: {len(gdf_filtered_pixels)}")
 
-    logger.info(f"Dissolve inicial completado. Se crearon {len(dissolved_initial)} grupos.")
-    if dissolved_initial.empty:
-        logger.error("El dissolve inicial no produjo ningún grupo, incluso después de limpiar los datos. Revisa la lógica de agrupación y los filtros previos.")
-        return gpd.GeoDataFrame()
+    # [CORREGIDO] Usar el nombre del campo p95 desde la configuración
+    p95_field = "p95" # Valor por defecto
+    if campos_metricas:
+        p95_field = campos_metricas.get("p95", "p95")
 
-    # 4) Calcular n_parcelas 
-    if intensidad == 0:
-        # Modo CSV: No calcular parcelas por intensidad, se asignarán desde CSV
-        logger.info("Modo CSV detectado (intensidad=0): estableciendo n_parcelas=0 temporalmente")
-        dissolved_initial['intensidad'] = 0
-        dissolved_initial['n_parcelas'] = 0
-    else:
-        # Modo normal: calcular por intensidad
+    if p95_field in gdf_filtered_pixels.columns:
+        p95_before_count = len(gdf_filtered_pixels)
+        gdf_filtered_pixels[p95_field] = pd.to_numeric(gdf_filtered_pixels[p95_field], errors='coerce').fillna(0)
+        gdf_filtered_pixels = gdf_filtered_pixels[gdf_filtered_pixels[p95_field] >= 2].copy()
+        logger.info(f"Registros antes de filtrar píxeles p95<2: {p95_before_count}")
+        logger.info(f"Registros después de filtrar p95<2: {len(gdf_filtered_pixels)}")
+
+    if gdf_filtered_pixels.empty:
+        logger.warning("No hay registros después de los filtros de calidad de píxeles. El resultado estará vacío.")
+        return gpd.GeoDataFrame(), gpd.GeoDataFrame()
+
+    # --- PASO 3: Agrupación (Dissolve) y filtro por área de grupo ---
+    logger.info("Realizando dissolve sobre datos filtrados para crear grupos...")
+    dissolved_gdf = gdf_filtered_pixels.dissolve(by=group_cols, as_index=False)
+    dissolved_gdf['area_m2_pre_buffer'] = dissolved_gdf.geometry.area
+    dissolved_gdf['area_ha_pre_buffer'] = dissolved_gdf['area_m2_pre_buffer'] / 10_000
+    logger.info(f"Dissolve completado. Se crearon {len(dissolved_gdf)} grupos.")
+
+    # [NUEVO] Guardar una copia antes de los filtros de área y buffer para análisis
+    dissolved_gdf_initial = dissolved_gdf.copy()
+
+    logger.info(f"Grupos antes de filtrar por área mínima ({area_minima_ha} ha): {len(dissolved_gdf)}")
+    dissolved_gdf = dissolved_gdf[dissolved_gdf['area_ha_pre_buffer'] >= area_minima_ha].copy()
+    logger.info(f"Grupos después de filtrar por área mínima: {len(dissolved_gdf)}")
+
+    if dissolved_gdf.empty:
+        logger.warning("Ningún grupo cumple el criterio de área mínima. El resultado estará vacío.")
+        return gpd.GeoDataFrame(), dissolved_gdf_initial
+
+    # --- PASO 4: Aplicación de buffer negativo y limpieza de geometrías ---
+    logger.info(f"Aplicando buffer negativo de {buffer_distance}m a {len(dissolved_gdf)} grupos...")
+    dissolved_gdf['geometry'] = dissolved_gdf.geometry.buffer(buffer_distance, resolution=16)
+    
+    # Filtrar geometrías vacías que resultan del buffer
+    grupos_pre_buffer = len(dissolved_gdf)
+    dissolved_gdf = dissolved_gdf[~dissolved_gdf.geometry.is_empty].copy()
+    logger.info(f"{len(dissolved_gdf)} de {grupos_pre_buffer} grupos sobrevivieron al buffer.")
+
+    if dissolved_gdf.empty:
+        logger.warning("Todos los grupos fueron eliminados por el buffer. No hay áreas para generar parcelas.")
+        return gpd.GeoDataFrame(), dissolved_gdf_initial
+        
+    dissolved_gdf['area_m2'] = dissolved_gdf.geometry.area
+    dissolved_gdf['area_ha'] = dissolved_gdf['area_m2'] / 10_000
+    
+    # Guardar GPKG de diagnóstico (opcional) con las áreas FINALES de generación
+    if output_gpkg_dissolved_initial:
+        logger.info(f"Generando GPKG de diagnóstico con áreas de generación finales en: {output_gpkg_dissolved_initial}")
+        pyogrio.write_dataframe(dissolved_gdf.reset_index(drop=True), output_gpkg_dissolved_initial, driver='GPKG', layer='areas_generacion_finales')
+
+    # --- PASO 5: Distribución de parcelas sobre las áreas finales ---
+    if use_total_based and total_parcels is not None:
+        logger.info(f"🎯 Modo Total-based: distribuyendo {total_parcels} parcelas sobre los grupos sobrevivientes.")
+        dissolved_gdf['intensidad'] = 0
+        
+        if minimum_config is None:
+            minimum_config = {"type": "none", "value": 0.0}
+        
+        dissolved_gdf = calcular_distribucion_proporcional(
+            dissolved_gdf,
+            group_cols,
+            total_parcels,
+            minimum_config,
+            use_original_area=False
+        )
+    elif intensidad == 0:
+        logger.info("Modo CSV (intensidad=0): n_parcelas se asignará más tarde.")
+        dissolved_gdf['intensidad'] = 0
+        dissolved_gdf['n_parcelas'] = 0
+    else: # Modo por intensidad
+        logger.info("Modo Intensidad: calculando parcelas por hectárea sobre área post-buffer.")
+        # Lógica de intensidad (se mantiene igual, pero opera sobre el área final)
         if use_intensidad_especifica:
             def get_intensidad_especifica(row):
                 for campo, intensidades in intensidad_por_campo.items():
                     if campo in row and row[campo] in intensidades:
                         return intensidades[row[campo]]
                 return intensidad
-            dissolved_initial['intensidad'] = dissolved_initial.apply(get_intensidad_especifica, axis=1)
+            dissolved_gdf['intensidad'] = dissolved_gdf.apply(get_intensidad_especifica, axis=1)
         else:
-            dissolved_initial['intensidad'] = intensidad
+            dissolved_gdf['intensidad'] = intensidad
         
-        dissolved_initial['n_parcelas'] = (dissolved_initial['area_ha'] / dissolved_initial['intensidad']).round().astype(int)
-        dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].apply(lambda x: max(x, 1) if x > 0 else 0)
+        dissolved_gdf['n_parcelas'] = (dissolved_gdf['area_ha'] / dissolved_gdf['intensidad']).round().astype(int)
+        dissolved_gdf['n_parcelas'] = dissolved_gdf['n_parcelas'].apply(lambda x: max(x, 1) if x > 0 else 0)
 
         if min_parcelas is not None:
-            dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].clip(lower=min_parcelas)
+            dissolved_gdf['n_parcelas'] = dissolved_gdf['n_parcelas'].clip(lower=min_parcelas)
         if max_parcelas is not None:
-            dissolved_initial['n_parcelas'] = dissolved_initial['n_parcelas'].clip(upper=max_parcelas)
+            dissolved_gdf['n_parcelas'] = dissolved_gdf['n_parcelas'].clip(upper=max_parcelas)
 
-    keep_cols = [col for col in group_cols + ['area_ha', 'area_m2', 'n_parcelas', 'intensidad', 'geometry'] if col in dissolved_initial.columns]
-    dissolved_initial = dissolved_initial[keep_cols]
-
-    # 5) Guardar resultados intermedios
-    if output_gpkg_dissolved_initial:
-        logger.info(f"Generando GPKG con el disuelto inicial en: {output_gpkg_dissolved_initial}")
-        pyogrio.write_dataframe(dissolved_initial, output_gpkg_dissolved_initial, driver='GPKG', layer='dissolved_inicial')
-
+    # --- PASO 6: Guardar CSV de resultados y devolver GDF listo para generación ---
     if output_csv:
-        logger.info(f"Generando CSV con resultados iniciales en: {output_csv}")
-        export_cols = [col for col in group_cols + ['area_ha', 'area_m2', 'n_parcelas', 'intensidad'] if col in dissolved_initial.columns]
-        dissolved_initial[export_cols].to_csv(output_csv, index=False)
-
-    # 6) Aplicar filtros de píxeles y segundo dissolve
-    logger.info(f"Registros antes de filtrar píxeles incompletos: {len(gdf_cleaned)}")
-    gdf_filtered = gdf_cleaned.copy()
-    gdf_filtered['area_m2'] = gdf_filtered.geometry.area
-    gdf_filtered = gdf_filtered[gdf_filtered['area_m2'] >= 399].copy()
-    logger.info(f"Registros después de filtrar <399 m2: {len(gdf_filtered)}")
-
-    p95_field = "p95"
-    if p95_field in gdf_filtered.columns:
-        logger.info(f"Registros antes de filtrar píxeles p95<{2}: {len(gdf_filtered)}")
-        gdf_filtered[p95_field] = pd.to_numeric(gdf_filtered[p95_field], errors='coerce').fillna(0)
-        gdf_filtered = gdf_filtered[gdf_filtered[p95_field] >= 2].copy()
-        logger.info(f"Registros después de filtrar p95<{2}: {len(gdf_filtered)}")
-
-    if gdf_filtered.empty:
-        logger.warning("No hay registros después de los filtros de píxeles. El resultado final estará vacío.")
-        return gpd.GeoDataFrame()
-
-    dissolved_final = gdf_filtered.dissolve(by=group_cols, as_index=False)
-    dissolved_final['area_m2'] = dissolved_final.geometry.area
-    dissolved_final['area_ha'] = dissolved_final['area_m2'] / 10_000
-    
-    # Unir para obtener n_parcelas y otros datos del dissolve inicial
-    merge_cols = [col for col in group_cols + ['area_ha', 'intensidad', 'n_parcelas'] if col in dissolved_initial.columns]
-    dissolved_initial_for_merge = dissolved_initial[merge_cols].rename(columns={'area_ha': 'area_ha_original'})
-    
-    dissolved_final = dissolved_final.merge(dissolved_initial_for_merge, on=group_cols, how='left')
-    dissolved_final.rename(columns={'area_ha': 'area_ha_post_filtros'}, inplace=True)
-    
-    # Asegurar que n_parcelas no sea nulo después del merge
-    dissolved_final['n_parcelas'] = dissolved_final['n_parcelas'].fillna(0).astype(int)
-
-    # 7) Filtrar por área mínima y aplicar buffer
-    logger.info(f"Registros antes de filtrar por área mínima de {area_minima_ha} ha: {len(dissolved_final)}")
-    dissolved_final = dissolved_final[dissolved_final['area_ha_post_filtros'] >= area_minima_ha].copy()
-    logger.info(f"Registros después de filtrar por área mínima: {len(dissolved_final)}")
-
-    if dissolved_final.empty:
-        logger.warning("Ningún grupo cumple el criterio de área mínima. El resultado final estará vacío.")
-        if output_gpkg:
-             # Guardar un archivo vacío para consistencia en el pipeline
-             gpd.GeoDataFrame([], geometry=[]).to_file(output_gpkg, driver='GPKG')
-        return gpd.GeoDataFrame()
+        logger.info(f"Generando CSV con resultados finales en: {output_csv}")
+        export_cols = [col for col in group_cols + ['area_ha', 'area_m2', 'n_parcelas', 'intensidad'] if col in dissolved_gdf.columns]
+        dissolved_gdf[export_cols].to_csv(output_csv, index=False)
 
     if output_gpkg:
-        logger.info(f"Aplicando buffer negativo de {buffer_distance}m...")
-        dissolved_final_buffer = dissolved_final.copy()
-        dissolved_final_buffer.geometry = dissolved_final_buffer.geometry.buffer(buffer_distance, resolution=16)
-        dissolved_final_buffer = dissolved_final_buffer[~dissolved_final_buffer.geometry.is_empty].copy()
-        dissolved_final_buffer['area_m2'] = dissolved_final_buffer.geometry.area
-        dissolved_final_buffer['area_ha_descuento_buff'] = dissolved_final_buffer['area_m2'] / 10000
-
-        logger.info(f"Guardando capa con buffer en: {output_gpkg}")
-        pyogrio.write_dataframe(dissolved_final_buffer, output_gpkg, driver='GPKG', layer=f'dissolved_final_neg{abs(buffer_distance)}')
-        return dissolved_final_buffer
-
-    return dissolved_final
+        logger.info(f"Guardando capa final (sin buffer adicional) en: {output_gpkg}")
+        # El buffer ya fue aplicado, solo guardamos el resultado
+        pyogrio.write_dataframe(dissolved_gdf.reset_index(drop=True), output_gpkg, driver='GPKG', layer=f'dissolved_final_neg{abs(buffer_distance)}')
+    
+    return dissolved_gdf, dissolved_gdf_initial

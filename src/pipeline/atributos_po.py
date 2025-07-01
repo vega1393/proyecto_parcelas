@@ -227,7 +227,8 @@ def asignar_atributos_po(parcelas_gdf: gpd.GeoDataFrame, po_config: Dict[str, An
     # Save to file if output path provided
     if output_path:
         try:
-            pyogrio.write_dataframe(parcels_with_po, output_path, layer='parcelas_con_atributos')
+            parcels_clean = parcels_with_po.reset_index(drop=True)
+            pyogrio.write_dataframe(parcels_clean, output_path, layer='parcelas_con_atributos')
             logger.info(f"Parcels with PO attributes saved to: {output_path}")
         except Exception as e:
             logger.error(f"Failed to save parcels with PO attributes: {e}")

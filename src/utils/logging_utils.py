@@ -32,6 +32,18 @@ class JsonStdoutHandler(logging.Handler):
 _queue_listener = None
 _queue = None
 
+def cleanup_logging() -> None:
+    """
+    Cierra el QueueListener y limpia recursos de logging para evitar errores de thread.
+    """
+    global _queue_listener
+    if _queue_listener:
+        try:
+            _queue_listener.stop()
+            _queue_listener = None
+        except Exception as e:
+            print(f"Warning: Error stopping queue listener: {e}")
+
 def setup_logging(log_file: str, level: int = logging.INFO, use_queue: bool = True) -> None:
     """
     Configures the logging system to write to a file, console, and JSON to stdout.

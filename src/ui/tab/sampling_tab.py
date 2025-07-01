@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 from src.utils.dialog_utils import EnhancedFileDialog, create_csv_file_filter
+from src.pipeline.distribucion_total import generar_preview_distribucion, _calcular_areas_por_grupo
 
 
 class SamplingTab(QWidget):
@@ -27,6 +28,7 @@ class SamplingTab(QWidget):
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
         self._field_mappings: List[List[str]] = []
+        self._grouping_fields: List[str] = []
         self._init_ui()
         self._connect_signals()
 
@@ -45,19 +47,23 @@ class SamplingTab(QWidget):
         # Radio buttons para seleccionar método
         self.method_button_group = QButtonGroup()
         self.intensity_radio = QRadioButton("Intensity-based Sampling")
-        self.csv_radio = QRadioButton("CSV-based Sampling")
+        self.csv_radio = QRadioButton("CSV-based Sampling") 
+        self.total_radio = QRadioButton("Total-based (Proportional Distribution)")
         
         self.intensity_radio.setToolTip("Generate parcels based on intensity per hectare")
         self.csv_radio.setToolTip("Generate parcels based on counts from CSV file")
+        self.total_radio.setToolTip("Distribute total number of parcels proportionally by area")
         
         # Por defecto, intensidad seleccionada
         self.intensity_radio.setChecked(True)
         
         self.method_button_group.addButton(self.intensity_radio, 0)
         self.method_button_group.addButton(self.csv_radio, 1)
+        self.method_button_group.addButton(self.total_radio, 2)
         
         method_layout.addWidget(self.intensity_radio)
         method_layout.addWidget(self.csv_radio)
+        method_layout.addWidget(self.total_radio)
         
         form_layout.addWidget(method_group)
 
@@ -177,8 +183,217 @@ class SamplingTab(QWidget):
         
         form_layout.addWidget(self.csv_section)
         
-        # Inicialmente ocultar sección CSV
+        # --- Configuración de Total-based Distribution ---
+        self.total_section = QGroupBox("🎯 Total-based Configuration")
+        # Cambiar a un layout vertical principal
+        total_main_layout = QVBoxLayout(self.total_section)
+        
+        # ===== Primera fila: Configuración básica =====
+        basic_config_layout = QHBoxLayout()
+        
+        # Columna izquierda: Total de parcelas
+        total_col_layout = QVBoxLayout()
+        total_label = QLabel("Total Parcels:")
+        total_label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        self.total_parcels_spin = QSpinBox()
+        self.total_parcels_spin.setRange(1, 100000)
+        self.total_parcels_spin.setValue(230)
+        self.total_parcels_spin.setSuffix(" parcels")
+        self.total_parcels_spin.setToolTip("Total number of parcels to distribute")
+        self.total_parcels_spin.setMinimumWidth(120)
+        total_col_layout.addWidget(total_label)
+        total_col_layout.addWidget(self.total_parcels_spin)
+        
+        # Columna derecha: Opciones principales
+        options_col_layout = QVBoxLayout()
+        options_label = QLabel("Options:")
+        options_label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        self.use_original_area_check = QCheckBox("Use original area (before filters)")
+        self.use_original_area_check.setChecked(True)
+        self.use_original_area_check.setToolTip("Calculate proportions based on original area before applying filters")
+        self.show_preview_check = QCheckBox("Show distribution preview")
+        self.show_preview_check.setChecked(True)
+        self.show_preview_check.setToolTip("Display how parcels will be distributed before execution")
+        options_col_layout.addWidget(options_label)
+        options_col_layout.addWidget(self.use_original_area_check)
+        options_col_layout.addWidget(self.show_preview_check)
+        
+        basic_config_layout.addLayout(total_col_layout)
+        basic_config_layout.addStretch()
+        basic_config_layout.addLayout(options_col_layout)
+        total_main_layout.addLayout(basic_config_layout)
+        
+        # ===== Segunda fila: Campos de agrupamiento =====
+        grouping_group = QGroupBox("Grouping Fields")
+        grouping_layout = QVBoxLayout(grouping_group)
+        
+        # Tabla simple para campos de agrupamiento
+        self.grouping_table = QTableWidget()
+        self.grouping_table.setColumnCount(1)
+        self.grouping_table.setHorizontalHeaderLabels(["Grouping Field"])
+        self.grouping_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.grouping_table.setMinimumHeight(140)
+        self.grouping_table.setToolTip("Fields used to create groups for proportional distribution")
+        grouping_layout.addWidget(self.grouping_table)
+        
+        # Botones simples
+        grouping_btn_layout = QHBoxLayout()
+        self.add_grouping_btn = QPushButton("Add Field")
+        self.remove_grouping_btn = QPushButton("Remove Selected")
+        self.auto_grouping_btn = QPushButton("Add Default (tipouso)")
+        
+        grouping_btn_layout.addWidget(self.add_grouping_btn)
+        grouping_btn_layout.addWidget(self.remove_grouping_btn)
+        grouping_btn_layout.addWidget(self.auto_grouping_btn)
+        grouping_btn_layout.addStretch()
+        grouping_layout.addLayout(grouping_btn_layout)
+        
+        total_main_layout.addWidget(grouping_group)
+        
+        # ===== Tercera fila: Configuración de mínimos =====
+        minimum_frame = QFrame()
+        minimum_frame.setFrameStyle(QFrame.Shape.Box)
+        minimum_frame.setLineWidth(1)
+        minimum_frame.setStyleSheet("QFrame { border: 1px solid #ccc; border-radius: 5px; padding: 5px; }")
+        minimum_main_layout = QVBoxLayout(minimum_frame)
+        
+        minimum_header = QLabel("🔧 Minimum Parcels per Group")
+        minimum_header.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        minimum_main_layout.addWidget(minimum_header)
+        
+        # Organizar opciones de mínimo en dos columnas
+        minimum_options_layout = QHBoxLayout()
+        
+        # Columna izquierda: Opciones básicas
+        left_min_layout = QVBoxLayout()
+        self.minimum_button_group = QButtonGroup()
+        
+        self.no_minimum_radio = QRadioButton("No minimum (pure proportional)")
+        self.no_minimum_radio.setToolTip("Some groups may get 0 parcels based on proportional distribution")
+        self.no_minimum_radio.setChecked(True)
+        
+        self.min_one_radio = QRadioButton("Minimum 1 per group")
+        self.min_one_radio.setToolTip("Every group gets at least 1 parcel")
+        
+        left_min_layout.addWidget(self.no_minimum_radio)
+        left_min_layout.addWidget(self.min_one_radio)
+        
+        # Columna derecha: Opciones avanzadas
+        right_min_layout = QVBoxLayout()
+        
+        # Mínimo personalizado
+        min_custom_layout = QHBoxLayout()
+        self.min_custom_radio = QRadioButton("Custom minimum:")
+        self.min_custom_spin = QSpinBox()
+        self.min_custom_spin.setRange(1, 100)
+        self.min_custom_spin.setValue(2)
+        self.min_custom_spin.setSuffix(" parcels")
+        self.min_custom_spin.setEnabled(False)
+        self.min_custom_spin.setMaximumWidth(100)
+        min_custom_layout.addWidget(self.min_custom_radio)
+        min_custom_layout.addWidget(self.min_custom_spin)
+        min_custom_layout.addStretch()
+        
+        # Mínimo porcentual
+        min_percent_layout = QHBoxLayout()
+        self.min_percent_radio = QRadioButton("Percentage minimum:")
+        self.min_percent_spin = QDoubleSpinBox()
+        self.min_percent_spin.setRange(0.1, 50.0)
+        self.min_percent_spin.setValue(0.5)
+        self.min_percent_spin.setSuffix("%")
+        self.min_percent_spin.setSingleStep(0.1)
+        self.min_percent_spin.setDecimals(1)
+        self.min_percent_spin.setEnabled(False)
+        self.min_percent_spin.setMaximumWidth(100)
+        min_percent_layout.addWidget(self.min_percent_radio)
+        min_percent_layout.addWidget(self.min_percent_spin)
+        min_percent_layout.addStretch()
+        
+        right_min_layout.addLayout(min_custom_layout)
+        right_min_layout.addLayout(min_percent_layout)
+        
+        self.minimum_button_group.addButton(self.no_minimum_radio, 0)
+        self.minimum_button_group.addButton(self.min_one_radio, 1)
+        self.minimum_button_group.addButton(self.min_custom_radio, 2)
+        self.minimum_button_group.addButton(self.min_percent_radio, 3)
+        
+        minimum_options_layout.addLayout(left_min_layout)
+        minimum_options_layout.addLayout(right_min_layout)
+        minimum_main_layout.addLayout(minimum_options_layout)
+        
+        total_main_layout.addWidget(minimum_frame)
+        
+        # ===== Cuarta fila: Vista previa de distribución =====
+        preview_frame = QFrame()
+        preview_frame.setFrameStyle(QFrame.Shape.Box)
+        preview_frame.setLineWidth(1)
+        preview_frame.setStyleSheet("QFrame { border: 1px solid #ccc; border-radius: 5px; padding: 5px; }")
+        preview_layout = QVBoxLayout(preview_frame)
+        
+        preview_header_layout = QHBoxLayout()
+        preview_header = QLabel("📊 Distribution Preview")
+        preview_header.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        
+        # Botón para generar preview (más compacto)
+        self.generate_preview_btn = QPushButton("Generate Preview")
+        self.generate_preview_btn.setToolTip("Generate distribution preview based on current Plan Operativo")
+        self.generate_preview_btn.setMaximumWidth(150)
+        self.generate_preview_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #007bff;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #0056b3;
+            }
+            QPushButton:pressed {
+                background-color: #004085;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+                color: #adb5bd;
+            }
+        """)
+        
+        preview_header_layout.addWidget(preview_header)
+        preview_header_layout.addStretch()
+        preview_header_layout.addWidget(self.generate_preview_btn)
+        preview_layout.addLayout(preview_header_layout)
+        
+        # Área de texto para preview
+        self.distribution_preview = QTextEdit()
+        self.distribution_preview.setReadOnly(True)
+        self.distribution_preview.setMaximumHeight(120)
+        self.distribution_preview.setMinimumHeight(100)
+        self.distribution_preview.setPlaceholderText("Click 'Generate Preview' to see parcel distribution...")
+        self.distribution_preview.setStyleSheet("""
+            QTextEdit {
+                background-color: #f8f9fa;
+                color: #495057;
+                border: 2px solid #dee2e6;
+                border-radius: 6px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 10px;
+                padding: 6px;
+            }
+        """)
+        preview_layout.addWidget(self.distribution_preview)
+        
+        total_main_layout.addWidget(preview_frame)
+        
+        form_layout.addWidget(self.total_section)
+        
+        # Inicialmente ocultar secciones CSV y Total
         self.csv_section.setVisible(False)
+        self.total_section.setVisible(False)
+        
+        # Agregar campo por defecto para Total-based
+        self._add_default_grouping()
 
         scroll.setWidget(content_widget)
         main_layout.addWidget(scroll)
@@ -205,17 +420,40 @@ class SamplingTab(QWidget):
         self.remove_mapping_btn.clicked.connect(self._remove_mapping_row)
         self.auto_detect_btn.clicked.connect(self._auto_detect_fields)
         self.mapping_table.cellChanged.connect(self._on_mapping_changed)
+        
+        # Total-based
+        self.total_parcels_spin.valueChanged.connect(self._emit_config_changed)
+        self.minimum_button_group.buttonToggled.connect(self._on_minimum_type_changed)
+        self.min_custom_spin.valueChanged.connect(self._emit_config_changed)
+        self.min_percent_spin.valueChanged.connect(self._emit_config_changed)
+        self.use_original_area_check.toggled.connect(self._emit_config_changed)
+        self.show_preview_check.toggled.connect(self._emit_config_changed)
+        self.generate_preview_btn.clicked.connect(self._generate_distribution_preview)
+        self.add_grouping_btn.clicked.connect(self._add_grouping_field)
+        self.remove_grouping_btn.clicked.connect(self._remove_grouping_field)
+        self.auto_grouping_btn.clicked.connect(self._add_default_grouping)
+        self.grouping_table.cellChanged.connect(self._on_grouping_changed)
 
     def _on_method_changed(self, button, checked: bool) -> None:
         """Maneja el cambio de método de muestreo."""
         if not checked:
             return
             
-        is_intensity = button == self.intensity_radio
-        
         # Mostrar/ocultar secciones según el método seleccionado
-        self.intensity_section.setVisible(is_intensity)
-        self.csv_section.setVisible(not is_intensity)
+        self.intensity_section.setVisible(button == self.intensity_radio)
+        self.csv_section.setVisible(button == self.csv_radio)
+        self.total_section.setVisible(button == self.total_radio)
+        
+        self._emit_config_changed()
+
+    def _on_minimum_type_changed(self, button, checked: bool) -> None:
+        """Maneja el cambio de tipo de mínimo para distribución total."""
+        if not checked:
+            return
+            
+        # Habilitar/deshabilitar controles según el tipo seleccionado
+        self.min_custom_spin.setEnabled(button == self.min_custom_radio)
+        self.min_percent_spin.setEnabled(button == self.min_percent_radio)
         
         self._emit_config_changed()
 
@@ -752,17 +990,91 @@ No groups have parcels assigned."""
         config = self.get_config()
         self.configChanged.emit(config)
 
+    def _add_grouping_field(self) -> None:
+        """Agrega un campo de agrupamiento a la tabla."""
+        row = self.grouping_table.rowCount()
+        self.grouping_table.insertRow(row)
+        
+        # ComboBox para el campo
+        field_combo = QComboBox()
+        field_combo.setEditable(True)
+        field_combo.addItems(self._get_available_fields())
+        field_combo.setCurrentText("tipouso")  # Valor por defecto
+        field_combo.currentTextChanged.connect(self._on_grouping_changed)
+        self.grouping_table.setCellWidget(row, 0, field_combo)
+        
+        self._emit_config_changed()
+
+    def _remove_grouping_field(self) -> None:
+        """Remueve el campo de agrupamiento seleccionado."""
+        current_row = self.grouping_table.currentRow()
+        if current_row >= 0:
+            self.grouping_table.removeRow(current_row)
+            self._on_grouping_changed()
+
+    def _add_default_grouping(self) -> None:
+        """Agrega el campo por defecto (tipouso) si no existe."""
+        # Verificar si ya existe tipouso
+        for row in range(self.grouping_table.rowCount()):
+            widget = self.grouping_table.cellWidget(row, 0)
+            if isinstance(widget, QComboBox) and widget.currentText() == "tipouso":
+                return  # Ya existe
+        
+        # Agregar tipouso
+        self._add_grouping_field()
+
+    def _on_grouping_changed(self) -> None:
+        """Maneja cambios en los campos de agrupamiento."""
+        # Actualizar la lista interna
+        self._grouping_fields = []
+        for row in range(self.grouping_table.rowCount()):
+            widget = self.grouping_table.cellWidget(row, 0)
+            if isinstance(widget, QComboBox):
+                field_name = widget.currentText().strip()
+                if field_name and field_name not in self._grouping_fields:
+                    self._grouping_fields.append(field_name)
+        
+        self._emit_config_changed()
+    
+    def _get_minimum_type(self) -> str:
+        """Obtiene el tipo de mínimo seleccionado."""
+        if self.no_minimum_radio.isChecked():
+            return "none"
+        elif self.min_one_radio.isChecked():
+            return "one"
+        elif self.min_custom_radio.isChecked():
+            return "custom"
+        elif self.min_percent_radio.isChecked():
+            return "percent"
+        return "none"
+    
+    def _get_minimum_value(self) -> float:
+        """Obtiene el valor del mínimo según el tipo seleccionado."""
+        if self.min_custom_radio.isChecked():
+            return float(self.min_custom_spin.value())
+        elif self.min_percent_radio.isChecked():
+            return self.min_percent_spin.value()
+        return 0.0
+
     def get_config(self) -> Dict[str, Any]:
         """Retorna la configuración actual del sampling."""
         config = {
             "use_csv": self.csv_radio.isChecked(),
+            "use_total": self.total_radio.isChecked(),
             "csv_path": self.csv_path_line.text().strip() if self.csv_radio.isChecked() else None,
             "base_intensity": self.base_intensity_spin.value(),
             "use_specific_intensity": self.specific_intensity_radio.isChecked(),
             "specific_intensities": {},
             "count_column_csv": self.count_column_combo.currentText(),
             "gridcode_column_csv": self.gridcode_column_combo.currentText(),
-            "field_mappings": self._field_mappings.copy()
+            "field_mappings": self._field_mappings.copy(),
+            # Total-based configuration
+            "total_parcels": self.total_parcels_spin.value(),
+            "grouping_fields": self._grouping_fields.copy(),
+            "minimum_type": self._get_minimum_type(),
+            "minimum_value": self._get_minimum_value(),
+            "use_original_area": self.use_original_area_check.isChecked(),
+            "show_preview": self.show_preview_check.isChecked()
         }
         
         # Obtener intensidades específicas
@@ -794,12 +1106,17 @@ No groups have parcels assigned."""
         self.base_intensity_spin.blockSignals(True)
         self.intensity_button_group.blockSignals(True)
         self.csv_path_line.blockSignals(True)
+        self.total_parcels_spin.blockSignals(True)
+        self.minimum_button_group.blockSignals(True)
         
         try:
             # Método de muestreo
             use_csv = config.get("use_csv", False)
+            use_total = config.get("use_total", False)
             if use_csv:
                 self.csv_radio.setChecked(True)
+            elif use_total:
+                self.total_radio.setChecked(True)
             else:
                 self.intensity_radio.setChecked(True)
             
@@ -887,8 +1204,55 @@ No groups have parcels assigned."""
             
             self._field_mappings = field_mappings.copy()
             
+            # Configuración Total-based
+            total_parcels = config.get("total_parcels", 800)
+            self.total_parcels_spin.setValue(total_parcels)
+            
+            # Campos de agrupamiento
+            grouping_fields = config.get("grouping_fields", [])
+            self.grouping_table.setRowCount(0)
+            self._grouping_fields = []
+            for field_name in grouping_fields:
+                row = self.grouping_table.rowCount()
+                self.grouping_table.insertRow(row)
+                
+                # ComboBox para el campo
+                field_combo = QComboBox()
+                field_combo.setEditable(True)
+                field_combo.addItems(self._get_available_fields())
+                field_combo.setCurrentText(field_name)
+                field_combo.currentTextChanged.connect(self._on_grouping_changed)
+                self.grouping_table.setCellWidget(row, 0, field_combo)
+                
+                self._grouping_fields.append(field_name)
+            
+            minimum_type = config.get("minimum_type", "none")
+            if minimum_type == "none":
+                self.no_minimum_radio.setChecked(True)
+            elif minimum_type == "one":
+                self.min_one_radio.setChecked(True)
+            elif minimum_type == "custom":
+                self.min_custom_radio.setChecked(True)
+            elif minimum_type == "percent":
+                self.min_percent_radio.setChecked(True)
+            
+            minimum_value = config.get("minimum_value", 0.0)
+            if minimum_type == "custom":
+                self.min_custom_spin.setValue(int(minimum_value))
+            elif minimum_type == "percent":
+                self.min_percent_spin.setValue(minimum_value)
+            
+            self.use_original_area_check.setChecked(config.get("use_original_area", True))
+            self.show_preview_check.setChecked(config.get("show_preview", True))
+            
             # Actualizar visibilidad de secciones
-            self._on_method_changed(self.csv_radio if use_csv else self.intensity_radio, True)
+            if use_csv:
+                selected_button = self.csv_radio
+            elif use_total:
+                selected_button = self.total_radio
+            else:
+                selected_button = self.intensity_radio
+            self._on_method_changed(selected_button, True)
             
         finally:
             # Restaurar señales
@@ -896,6 +1260,8 @@ No groups have parcels assigned."""
             self.base_intensity_spin.blockSignals(False)
             self.intensity_button_group.blockSignals(False)
             self.csv_path_line.blockSignals(False)
+            self.total_parcels_spin.blockSignals(False)
+            self.minimum_button_group.blockSignals(False)
             
             # Actualizar estados
             self._on_intensity_type_changed(
@@ -903,6 +1269,93 @@ No groups have parcels assigned."""
                 True
             )
             
+            # Actualizar estado de controles de mínimo
+            if use_total:
+                minimum_type = config.get("minimum_type", "none")
+                if minimum_type == "custom":
+                    self._on_minimum_type_changed(self.min_custom_radio, True)
+                elif minimum_type == "percent":
+                    self._on_minimum_type_changed(self.min_percent_radio, True)
+                else:
+                    self._on_minimum_type_changed(self.no_minimum_radio, True)
+            
             # Actualizar estadísticas CSV si estamos en modo CSV
             if use_csv:
-                self._update_csv_statistics() 
+                self._update_csv_statistics()
+
+    def _generate_distribution_preview(self) -> None:
+        """Genera y muestra el preview de distribución de parcelas total-based."""
+        try:
+            # Obtener información del archivo PO
+            po_file_path, po_layer = self._get_po_file_info()
+            if not po_file_path or not po_layer:
+                self.distribution_preview.setText("❌ Error: No Plan Operativo file configured.")
+                return
+            
+            if not os.path.exists(po_file_path):
+                self.distribution_preview.setText(f"❌ Error: Plan Operativo file not found: {po_file_path}")
+                return
+            
+            # Deshabilitar botón mientras genera preview
+            self.generate_preview_btn.setEnabled(False)
+            self.generate_preview_btn.setText("Generating...")
+            
+            # Leer datos del Plan Operativo
+            gdf = gpd.read_file(po_file_path, layer=po_layer, engine='pyogrio')
+            
+            if gdf.empty:
+                self.distribution_preview.setText("❌ Error: Plan Operativo file is empty.")
+                return
+            
+            # Obtener configuración actual
+            total_parcels = self.total_parcels_spin.value()
+            minimum_type = self._get_minimum_type()
+            minimum_value = self._get_minimum_value()
+            use_original_area = self.use_original_area_check.isChecked()
+            
+            # Preparar configuración de mínimo
+            minimum_config = {
+                "type": minimum_type,
+                "value": minimum_value
+            }
+            
+            # Verificar que haya campos de agrupamiento configurados
+            if not self._grouping_fields:
+                self.distribution_preview.setText("❌ Error: No grouping fields configured. Please add at least one field.")
+                return
+            
+            # Verificar que los campos existen en el GeoDataFrame
+            missing_fields = [field for field in self._grouping_fields if field not in gdf.columns]
+            if missing_fields:
+                self.distribution_preview.setText(f"❌ Error: Fields not found in Plan Operativo: {', '.join(missing_fields)}")
+                return
+            
+            # Calcular áreas por grupo usando los campos seleccionados
+            areas_df = _calcular_areas_por_grupo(
+                gdf=gdf,
+                grouping_fields=self._grouping_fields,
+                use_original_area=use_original_area
+            )
+            
+            # Generar preview usando la función de distribucion_total.py
+            preview_text = generar_preview_distribucion(
+                areas_df=areas_df,
+                total_parcels=total_parcels,
+                minimum_config=minimum_config,
+                max_groups=15  # Mostrar hasta 15 grupos en el preview
+            )
+            
+            if preview_text:
+                self.distribution_preview.setText(preview_text)
+            else:
+                self.distribution_preview.setText("❌ Error: Could not generate distribution preview.")
+                
+        except Exception as e:
+            error_msg = f"❌ Error generating preview: {str(e)}"
+            self.distribution_preview.setText(error_msg)
+            print(f"Error in _generate_distribution_preview: {e}")
+            
+        finally:
+            # Rehabilitar botón
+            self.generate_preview_btn.setEnabled(True)
+            self.generate_preview_btn.setText("Generate Preview") 

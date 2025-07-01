@@ -11,222 +11,117 @@ logger = logging.getLogger(__name__)
 
 
 def analizar_perdidas_parcelas(
-    gdf_inicial: gpd.GeoDataFrame,
+    gdf_calculado: gpd.GeoDataFrame,
     fields: List[str],
-    gdf_post_filtros: Optional[gpd.GeoDataFrame] = None,
-    gdf_post_exclusion: Optional[gpd.GeoDataFrame] = None,
-    gdf_final: Optional[gpd.GeoDataFrame] = None,
+    gdf_generado: Optional[gpd.GeoDataFrame] = None,
     output_csv: Optional[str] = None
 ) -> pd.DataFrame:
     """
-    Analiza las pérdidas de parcelas en cada etapa del proceso.
+    Analiza la correspondencia entre parcelas planificadas y generadas.
+    Lógica V2: Adaptada al flujo refactorizado donde el cálculo y los filtros
+    se realizan en un solo paso.
     
     Args:
-        gdf_inicial: GeoDataFrame inicial con áreas agrupadas
-        fields: Campos de agrupación
-        gdf_post_filtros: GeoDataFrame después de aplicar filtros (opcional)
-        gdf_post_exclusion: GeoDataFrame después de exclusiones (opcional)
-        gdf_final: GeoDataFrame final con parcelas generadas (opcional)
-        output_csv: Ruta del archivo CSV de salida (opcional)
+        gdf_calculado: GeoDataFrame con los grupos y n_parcelas planificadas
+                       (salida de calculo_parcelas).
+        fields: Campos de agrupación.
+        gdf_generado: GeoDataFrame con las parcelas de puntos finales generadas (opcional).
+        output_csv: Ruta del archivo CSV de salida (opcional).
         
     Returns:
-        DataFrame con el análisis de pérdidas por grupo
+        DataFrame con el análisis final.
     """
-    logger.debug("Iniciando análisis de pérdidas de parcelas...")
+    logger.debug("Iniciando análisis de pérdidas (Lógica V2)...")
     
-    # Crear un DataFrame base con los grupos iniciales y sus n_parcelas planificadas
-    analisis_df = gdf_inicial[fields + ['n_parcelas']].copy()
-    analisis_df = analisis_df.rename(columns={'n_parcelas': 'n_parcelas_inicial'})
+    # --- VALIDACIÓN DE CAMPOS ---
+    available_fields = [field for field in fields if field in gdf_calculado.columns]
+    missing_fields = [field for field in fields if field not in gdf_calculado.columns]
     
-    # Agregar información de áreas
-    if 'area_ha' in gdf_inicial.columns:
-        analisis_df['area_ha_inicial'] = gdf_inicial['area_ha']
-    elif 'area_m2' in gdf_inicial.columns:
-        analisis_df['area_ha_inicial'] = gdf_inicial['area_m2'] / 10000
-    else:
-        analisis_df['area_ha_inicial'] = gdf_inicial.geometry.area / 10000
+    if missing_fields:
+        logger.warning(f"⚠️  Campos de agrupación faltantes en GDF de entrada y serán ignorados: {missing_fields}")
     
-    # Análisis post-filtros
-    if gdf_post_filtros is not None:
-        # Preparar diccionario de agregación dinámicamente
-        agg_dict = {'n_parcelas': 'first'}
-        
-        # Solo agregar area_ha si existe en el DataFrame
-        if 'area_ha' in gdf_post_filtros.columns:
-            agg_dict['area_ha'] = 'first'
-        
-        post_filtros_summary = gdf_post_filtros.groupby(fields).agg(agg_dict).reset_index()
-        
-        # Si no tenemos area_ha, calcularla desde area_m2 o geometría
-        if 'area_ha' not in post_filtros_summary.columns:
-            if 'area_m2' in gdf_post_filtros.columns:
-                area_ha_values = gdf_post_filtros.groupby(fields)['area_m2'].first().values / 10000
-                post_filtros_summary['area_ha'] = area_ha_values
-            else:
-                area_ha_values = gdf_post_filtros.groupby(fields).apply(
-                    lambda x: x.geometry.area.iloc[0] / 10000
-                ).values
-                post_filtros_summary['area_ha'] = area_ha_values
-        
-        # Merge con sufijos para evitar conflictos
-        analisis_df = analisis_df.merge(
-            post_filtros_summary, 
-            on=fields, how='left', suffixes=('', '_post_filtros')
-        )
-        
-        # Renombrar columnas con sufijos si es necesario
-        if 'n_parcelas_post_filtros' in analisis_df.columns:
-            analisis_df['n_parcelas_post_filtros'] = analisis_df['n_parcelas_post_filtros'].fillna(0)
-        else:
-            analisis_df['n_parcelas_post_filtros'] = analisis_df['n_parcelas'].fillna(0)
-            
-        if 'area_ha_post_filtros' in analisis_df.columns:
-            analisis_df['area_ha_post_filtros'] = analisis_df['area_ha_post_filtros'].fillna(0)
-        else:
-            analisis_df['area_ha_post_filtros'] = analisis_df['area_ha'].fillna(0)
-        
-        # Limpiar columnas duplicadas
-        analisis_df = analisis_df.drop(columns=['n_parcelas', 'area_ha'], errors='ignore')
-    else:
-        analisis_df['n_parcelas_post_filtros'] = analisis_df['n_parcelas_inicial']
-        analisis_df['area_ha_post_filtros'] = analisis_df['area_ha_inicial']
+    if not available_fields:
+        logger.error("❌ No hay campos de agrupación válidos para el análisis.")
+        return pd.DataFrame()
+    
+    logger.info(f"📊 Analizando resultados usando campos: {available_fields}")
 
-    # Análisis post-exclusión
-    if gdf_post_exclusion is not None:
-        # Preparar diccionario de agregación dinámicamente
-        agg_dict = {'n_parcelas': 'first'}
-        
-        # Verificar qué columna de área existe
-        area_col = None
-        if 'area_ha_post_exclusion' in gdf_post_exclusion.columns:
-            area_col = 'area_ha_post_exclusion'
-            agg_dict[area_col] = 'first'
-        elif 'area_ha' in gdf_post_exclusion.columns:
-            area_col = 'area_ha'
-            agg_dict[area_col] = 'first'
-        
-        post_exclusion_summary = gdf_post_exclusion.groupby(fields).agg(agg_dict).reset_index()
-        
-        # Si no tenemos columna de área, calcularla
-        if area_col is None:
-            if 'area_m2' in gdf_post_exclusion.columns:
-                area_ha_values = gdf_post_exclusion.groupby(fields)['area_m2'].first().values / 10000
-                post_exclusion_summary['area_ha_post_exclusion'] = area_ha_values
-            else:
-                area_ha_values = gdf_post_exclusion.groupby(fields).apply(
-                    lambda x: x.geometry.area.iloc[0] / 10000
-                ).values
-                post_exclusion_summary['area_ha_post_exclusion'] = area_ha_values
-        elif area_col != 'area_ha_post_exclusion':
-            # Renombrar la columna de área al nombre estándar
-            post_exclusion_summary = post_exclusion_summary.rename(columns={area_col: 'area_ha_post_exclusion'})
-        
-        analisis_df = analisis_df.merge(post_exclusion_summary, on=fields, how='left')
-        analisis_df['n_parcelas'] = analisis_df['n_parcelas'].fillna(0)
-        analisis_df['area_ha_post_exclusion'] = analisis_df['area_ha_post_exclusion'].fillna(0)
-    else:
-        analisis_df['n_parcelas'] = analisis_df['n_parcelas_post_filtros']
-        analisis_df['area_ha_post_exclusion'] = analisis_df['area_ha_post_filtros']
-    
-    # Análisis de parcelas finalmente generadas
-    if gdf_final is not None:
-        parcels_by_group = gdf_final.groupby(fields).size().reset_index(name='parcelas_generadas')
-        analisis_df = analisis_df.merge(parcels_by_group, on=fields, how='left')
-        analisis_df['parcelas_generadas'] = analisis_df['parcelas_generadas'].fillna(0)
+    # --- DATAFRAME BASE ---
+    # El DataFrame de análisis se basa directamente en los resultados del cálculo
+    analisis_df = gdf_calculado[available_fields + ['n_parcelas']].copy()
+    analisis_df.rename(columns={'n_parcelas': 'parcelas_planificadas'}, inplace=True)
+
+    # --- CONTEO DE PARCELAS GENERADAS ---
+    if gdf_generado is not None and not gdf_generado.empty:
+        # Asegurar que los campos de agrupación existen en el gdf generado
+        gen_fields = [f for f in available_fields if f in gdf_generado.columns]
+        if not gen_fields:
+             logger.warning("No se encontraron campos de agrupación en el GDF de parcelas generadas. No se puede hacer el join.")
+             analisis_df['parcelas_generadas'] = 0
+        else:
+            parcels_by_group = gdf_generado.groupby(gen_fields).size().reset_index(name='parcelas_generadas')
+            
+            # [NUEVO] Asegurar consistencia de tipos antes del merge
+            for col in gen_fields:
+                if col in analisis_df.columns and col in parcels_by_group.columns:
+                    analisis_df[col] = analisis_df[col].astype(str)
+                    parcels_by_group[col] = parcels_by_group[col].astype(str)
+
+            analisis_df = analisis_df.merge(parcels_by_group, on=gen_fields, how='left')
+            analisis_df['parcelas_generadas'] = analisis_df['parcelas_generadas'].fillna(0).astype(int)
     else:
         analisis_df['parcelas_generadas'] = 0
 
-    # Calcular diferencias
-    analisis_df['perdida_filtros'] = analisis_df['n_parcelas_inicial'] - analisis_df['n_parcelas_post_filtros']
-    analisis_df['perdida_exclusion'] = analisis_df['n_parcelas_post_filtros'] - analisis_df['n_parcelas']
-    analisis_df['diferencia_final'] = analisis_df['n_parcelas'] - analisis_df['parcelas_generadas']
+    # --- CÁLCULO DE DIFERENCIAS Y ESTADÍSTICAS ---
+    analisis_df['diferencia'] = analisis_df['parcelas_planificadas'] - analisis_df['parcelas_generadas']
     
+    total_planificadas = analisis_df['parcelas_planificadas'].sum()
+    total_generadas = analisis_df['parcelas_generadas'].sum()
+    
+    grupos_totales_planificados = len(analisis_df)
+    # Grupos donde se planificó al menos una parcela
+    grupos_con_plan = analisis_df[analisis_df['parcelas_planificadas'] > 0]
+    
+    # Sobre los que tenían plan, cuántos se completaron
+    grupos_completos = len(grupos_con_plan[grupos_con_plan['diferencia'] == 0])
+    grupos_incompletos = len(grupos_con_plan[grupos_con_plan['diferencia'] != 0])
+    
+    tasa_exito = (total_generadas / total_planificadas * 100) if total_planificadas > 0 else 0
+
+    # --- REPORTE EN LOG ---
+    logger.info("=" * 70)
+    logger.info("=== ANÁLISIS DE GENERACIÓN DE PARCELAS (REPORTE V2) ===")
+    logger.info("=" * 70)
+    
+    logger.info("RESUMEN GENERAL:")
+    logger.info(f"   - Total Parcelas Planificadas: {int(total_planificadas)}")
+    logger.info(f"   - Total Parcelas Generadas:    {int(total_generadas)}")
+    logger.info(f"   - Tasa de Éxito General:       {tasa_exito:.1f}%")
+    
+    logger.info("\nANÁLISIS POR GRUPOS:")
+    logger.info(f"   - Grupos con parcelas planificadas: {len(grupos_con_plan)} de {grupos_totales_planificados}")
+    logger.info(f"   - Grupos completos (100% generado): {grupos_completos}")
+    logger.info(f"   - Grupos con pérdidas en generación: {grupos_incompletos}")
+    
+    if grupos_incompletos > 0:
+        logger.warning("\nDETALLE DE GRUPOS CON PÉRDIDAS EN GENERACIÓN:")
+        perdidas_df = grupos_con_plan[grupos_con_plan['diferencia'] > 0].copy()
+        for _, row in perdidas_df.iterrows():
+            grupo_id_parts = [f"{field}={row[field]}" for field in available_fields[:3]]
+            grupo_id = ", ".join(grupo_id_parts)
+            logger.warning(
+                f"  - Grupo '{grupo_id}': "
+                f"Planificadas={int(row['parcelas_planificadas'])}, "
+                f"Generadas={int(row['parcelas_generadas'])} "
+                f"(Pérdida: {int(row['diferencia'])})"
+            )
+            
+    logger.info("\n" + "=" * 70)
+        
     if output_csv:
         analisis_df.to_csv(output_csv, index=False)
-
-    total_planificadas = analisis_df['n_parcelas'].sum()
-    total_generadas = analisis_df['parcelas_generadas'].sum()
-    diferencia = total_planificadas - total_generadas
-    
-    # Calcular estadísticas de grupos
-    grupos_totales = len(analisis_df)
-    grupos_completos = len(analisis_df[analisis_df['diferencia_final'] == 0])
-    grupos_incompletos = len(analisis_df[analisis_df['diferencia_final'] > 0])
-    grupos_sin_parcelas = len(analisis_df[analisis_df['parcelas_generadas'] == 0])
-    
-    logger.info("=" * 70)
-    logger.info("=== ANÁLISIS DETALLADO DE PÉRDIDAS DE PARCELAS ===")
-    logger.info("=" * 70)
-    
-    # Resumen general
-    logger.info("RESUMEN GENERAL:")
-    logger.info(f"   - Total grupos procesados: {grupos_totales}")
-    logger.info(f"   - Total parcelas planificadas: {int(total_planificadas)}")
-    logger.info(f"   - Total parcelas generadas: {int(total_generadas)}")
-    logger.info(f"   - Tasa de exito: {(total_generadas/total_planificadas*100):.1f}%")
-    
-    if diferencia > 0:
-        logger.info(f"   - Parcelas no generadas: {int(diferencia)}")
-    else:
-        logger.info("   - No hubo perdidas finales.")
-    
-    logger.info("")
-    
-    # Estadísticas de grupos
-    logger.info("ANALISIS POR GRUPOS:")
-    logger.info(f"   - Grupos completos (100%): {grupos_completos}/{grupos_totales} ({grupos_completos/grupos_totales*100:.1f}%)")
-    logger.info(f"   - Grupos incompletos: {grupos_incompletos}/{grupos_totales} ({grupos_incompletos/grupos_totales*100:.1f}%)")
-    logger.info(f"   - Grupos sin parcelas: {grupos_sin_parcelas}/{grupos_totales} ({grupos_sin_parcelas/grupos_totales*100:.1f}%)")
-    
-    logger.info("")
-    
-    # Mostrar tabla detallada si hay problemas o en modo DEBUG
-    if diferencia > 0 or logger.isEnabledFor(logging.DEBUG):
-        logger.info("TABLA DETALLADA POR GRUPO:")
-        logger.info("-" * 70)
         
-        # Encabezados de la tabla
-        header = f"{'Grupo':<20} {'Plan.':<6} {'Gen.':<6} {'Dif.':<6} {'Estado':<10}"
-        logger.info(header)
-        logger.info("-" * 70)
-        
-        # Mostrar cada grupo
-        for _, row in analisis_df.iterrows():
-            # Crear identificador del grupo
-            grupo_id = " | ".join([f"{field}:{row[field]}" for field in fields[:2]])  # Solo primeros 2 campos
-            if len(grupo_id) > 18:
-                grupo_id = grupo_id[:15] + "..."
-            
-            planificadas = int(row['n_parcelas'])
-            generadas = int(row['parcelas_generadas'])
-            diferencia_grupo = int(row['diferencia_final'])
-            
-            if diferencia_grupo == 0:
-                estado = "OK COMPLETO"
-            elif generadas == 0:
-                estado = "SIN PARCELAS"
-            else:
-                estado = "INCOMPLETO"
-            
-            fila = f"{grupo_id:<20} {planificadas:<6} {generadas:<6} {diferencia_grupo:<6} {estado:<10}"
-            logger.info(fila)
-        
-        logger.info("-" * 70)
-    
-    # Resumen de pérdidas por etapa
-    if 'perdida_filtros' in analisis_df.columns and 'perdida_exclusion' in analisis_df.columns:
-        perdidas_filtros = analisis_df['perdida_filtros'].sum()
-        perdidas_exclusion = analisis_df['perdida_exclusion'].sum()
-        
-        logger.info("")
-        logger.info("PERDIDAS POR ETAPA:")
-        logger.info(f"   - Perdidas por filtros: {int(perdidas_filtros)}")
-        logger.info(f"   - Perdidas por exclusiones: {int(perdidas_exclusion)}")
-        logger.info(f"   - Perdidas por generacion: {int(diferencia)}")
-    
-    logger.info("=" * 70)
-        
-    return analisis_df 
+    return analisis_df
 
 
 def analizar_perdidas_con_csv(
@@ -263,6 +158,20 @@ def analizar_perdidas_con_csv(
     """
     logger.debug("Iniciando análisis de pérdidas con CSV original...")
     
+    # === VALIDACIÓN ROBUSTA DE CAMPOS ===
+    # Filtrar solo los campos que realmente existen en los GeoDataFrames
+    available_fields = [field for field in fields if field in gdf_inicial.columns]
+    missing_fields = [field for field in fields if field not in gdf_inicial.columns]
+    
+    if missing_fields:
+        logger.warning(f"⚠️  Campos faltantes en análisis CSV (serán ignorados): {missing_fields}")
+    
+    if not available_fields:
+        logger.error("❌ No hay campos válidos para análisis CSV")
+        return pd.DataFrame()
+    
+    logger.info(f"📊 Analizando pérdidas CSV usando campos: {available_fields}")
+    
     # Preparar el CSV original para análisis
     csv_df = csv_original.copy()
     
@@ -298,18 +207,18 @@ def analizar_perdidas_con_csv(
         gdf_prep = gdf.copy()
         
         # Harmonizar tipos de datos
-        for col in fields:
+        for col in available_fields:
             if col in gdf_prep.columns:
                 gdf_prep[col] = gdf_prep[col].astype(str)
         
         # Agrupar por campos de agrupación
         if 'n_parcelas' in gdf_prep.columns:
-            gdf_summary = gdf_prep.groupby(fields).agg({
+            gdf_summary = gdf_prep.groupby(available_fields).agg({
                 'n_parcelas': 'first'
             }).reset_index()
         else:
             # Si no hay n_parcelas, contar registros
-            gdf_summary = gdf_prep.groupby(fields).size().reset_index(name='n_parcelas')
+            gdf_summary = gdf_prep.groupby(available_fields).size().reset_index(name='n_parcelas')
         
         # Renombrar columnas para la etapa
         gdf_summary = gdf_summary.rename(columns={'n_parcelas': f'parcelas_{stage_name}'})
@@ -352,9 +261,9 @@ def analizar_perdidas_con_csv(
     
     # Análisis por etapas
     stages = [
-        (gdf_inicial, 'inicial', fields),
-        (gdf_post_filtros, 'post_filtros', fields),
-        (gdf_post_exclusion, 'post_exclusion', fields),
+        (gdf_inicial, 'inicial', available_fields),
+        (gdf_post_filtros, 'post_filtros', available_fields),
+        (gdf_post_exclusion, 'post_exclusion', available_fields),
     ]
     
     for gdf, stage_name, stage_fields in stages:
@@ -365,15 +274,15 @@ def analizar_perdidas_con_csv(
     if gdf_final is not None and not gdf_final.empty:
         # Preparar GDF final
         gdf_final_prep = gdf_final.copy()
-        for col in fields:
+        for col in available_fields:
             if col in gdf_final_prep.columns:
                 gdf_final_prep[col] = gdf_final_prep[col].astype(str)
         
         # Contar parcelas generadas por grupo
-        parcels_generated = gdf_final_prep.groupby(fields).size().reset_index(name='parcelas_generadas')
+        parcels_generated = gdf_final_prep.groupby(available_fields).size().reset_index(name='parcelas_generadas')
         
         # Hacer merge
-        analisis_df = safe_merge(analisis_df, parcels_generated, csv_grouping_cols, fields, 'generadas')
+        analisis_df = safe_merge(analisis_df, parcels_generated, csv_grouping_cols, available_fields, 'generadas')
     else:
         analisis_df['parcelas_generadas'] = 0
         analisis_df['causa_perdida_generadas'] = 'Sin parcelas finales'

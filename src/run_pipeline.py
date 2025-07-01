@@ -29,7 +29,7 @@ def main():
     # Mover las importaciones que son parte de la lógica aquí dentro
     try:
         from src.core.pipeline import ejecutar_proceso
-        from src.utils.logging_utils import setup_logging
+        from src.utils.logging_utils import setup_logging, cleanup_logging
         debug_print("Módulos del pipeline importados correctamente.")
     except ImportError as e:
         # Este es un error crítico, lo reportamos en JSON y salimos
@@ -85,10 +85,16 @@ def main():
             csv_path=config.get("csv_path"),
             grouping_fields=config.get("grouping_fields"),
             delivery_config=delivery_config,
-            gridcode_column_csv=config.get("gridcode_column_csv")
+            gridcode_column_csv=config.get("gridcode_column_csv"),
+            # Nuevos parámetros total-based
+            use_total=config.get("use_total", False),
+            total_config=config.get("total_config")
         )
         
         print(json.dumps({"type": "success", "message": "Proceso completado exitosamente", "resultados": "Ver archivos de salida"}), flush=True)
+        
+        # Limpiar recursos de logging para evitar errores de thread
+        cleanup_logging()
         
         # Limpiar archivo temporal de configuración si existe
         if os.path.exists(config_path) and config_path.startswith(os.path.join(os.path.dirname(__file__), "src", "json_config", "tmp")):
@@ -127,6 +133,13 @@ def main():
         error_message = f"Error durante la ejecución del pipeline: {str(e)}"
         tb_lines = traceback.format_exc().splitlines()
         print(json.dumps({"type": "error", "message": error_message, "traceback_lines": tb_lines}), flush=True)
+        
+        # Limpiar recursos de logging también en caso de error
+        try:
+            cleanup_logging()
+        except:
+            pass  # Ignorar errores en el cleanup
+            
         sys.exit(1)
 
 

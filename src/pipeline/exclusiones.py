@@ -48,7 +48,8 @@ def aplicar_exclusiones(
         
         if output_gpkg:
             logger.info(f"Guardando datos sin exclusiones en: {output_gpkg}")
-            pyogrio.write_dataframe(result_gdf, output_gpkg, layer='areas_post_exclusion')
+            result_clean = result_gdf.reset_index(drop=True)
+            pyogrio.write_dataframe(result_clean, output_gpkg, layer='areas_post_exclusion')
         
         return result_gdf
 
@@ -72,7 +73,8 @@ def aplicar_exclusiones(
         
         if output_gpkg:
             logger.info(f"Guardando datos sin exclusiones en: {output_gpkg}")
-            pyogrio.write_dataframe(result_gdf, output_gpkg, layer='areas_post_exclusion')
+            result_clean = result_gdf.reset_index(drop=True)
+            pyogrio.write_dataframe(result_clean, output_gpkg, layer='areas_post_exclusion')
         
         return result_gdf
 
@@ -160,7 +162,8 @@ def aplicar_exclusiones(
 
     if output_gpkg:
         logger.info(f"Guardando resultado de exclusiones en: {output_gpkg}")
-        pyogrio.write_dataframe(result_gdf, output_gpkg, layer='areas_post_exclusion')
+        result_clean = result_gdf.reset_index(drop=True)
+        pyogrio.write_dataframe(result_clean, output_gpkg, layer='areas_post_exclusion')
 
     logger.info(f"Proceso de exclusiones completado. Registros finales: {len(result_gdf)}")
     return result_gdf

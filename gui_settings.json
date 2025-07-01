@@ -1,19 +1,20 @@
 {
     "pipeline_config": {
-        "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E04_Metricas.gpkg",
-        "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627_v2",
+        "input_path": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/03_metricas/grilla_metrica_prioritarios_v2.gpkg",
+        "output_dir": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/02_parcel/control_plots/plots_afuy_control_v02_prioritarios_20250627",
         "style": "custom",
         "grouping_fields": [
-            "tipouso",
-            "tipomateri",
-            "gridcode"
+            "ID_PREDIO",
+            "RODAL",
+            "ESPECIE",
+            "MATERIAL_G"
         ],
         "cfg_overrides": {
-            "PROJECTED_CRS": 31982,
-            "AREA_MINIMA_HA": 0.008,
-            "BUFFER_DISTANCE": -20,
-            "MIN_DISTANCE": 60.0,
-            "ID_PARCELA_INICIO": 1,
+            "PROJECTED_CRS": 32721,
+            "AREA_MINIMA_HA": 0.0,
+            "BUFFER_DISTANCE": -12,
+            "MIN_DISTANCE": 120.0,
+            "ID_PARCELA_INICIO": 2,
             "VERSION_PARCELA": "",
             "MIN_PARCELAS_HABILITADO": false,
             "MIN_PARCELAS": 1,
@@ -22,13 +23,14 @@
         }
     },
     "sampling_config": {
-        "use_csv": true,
-        "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E04_20250625.csv",
+        "use_csv": false,
+        "use_total": true,
+        "csv_path": null,
         "base_intensity": 55,
         "use_specific_intensity": false,
         "specific_intensities": {},
-        "count_column_csv": "n",
-        "gridcode_column_csv": "gridcode2",
+        "count_column_csv": "",
+        "gridcode_column_csv": "",
         "field_mappings": [
             [
                 "tipouso",
@@ -38,23 +40,37 @@
                 "tipomateri",
                 "tipomateri"
             ]
-        ]
+        ],
+        "total_parcels": 65,
+        "grouping_fields": [
+            "MATERIAL_G",
+            "ESPECIE",
+            "RODAL"
+        ],
+        "minimum_type": "custom",
+        "minimum_value": 4.0,
+        "use_original_area": false,
+        "show_preview": true
     },
     "po_config": {
-        "ruta": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/01_po/01_po_from_arauco/po_brasil_2025_v04_usoabril.gpkg",
+        "ruta": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/01_po/af_uruguay_patch_20250623_prioritarios.gpkg",
         "capa": "uso_suelo",
         "campos": [
-            "predio",
-            "rodal",
-            "anoplantac",
-            "talhao",
-            "mesplantac",
-            "tipouso",
-            "tipomateri"
+            "ID_FONDO",
+            "DCR_FONDO",
+            "ID_PREDIO",
+            "PREDIO",
+            "RODAL",
+            "PATCH",
+            "USO_SUELO",
+            "ESPECIE",
+            "MATERIAL_G",
+            "FECHA_PLAN",
+            "ANO_PLANTA"
         ],
         "campos_id_fasa": {
-            "predio": "predio",
-            "tipo": "tipouso"
+            "predio": "ID_PREDIO",
+            "tipo": "MATERIAL_G"
         }
     },
     "exclusion_config": [],
@@ -65,16 +81,16 @@
                 "field": "cov",
                 "bins": [
                     {
-                        "max": 50.0,
+                        "max": 33.0,
                         "id": 1
                     },
                     {
-                        "min": 50.0,
-                        "max": 75.0,
+                        "min": 33.0,
+                        "max": 79.0,
                         "id": 2
                     },
                     {
-                        "min": 75.0,
+                        "min": 79.0,
                         "id": 3
                     }
                 ]
@@ -83,26 +99,26 @@
                 "field": "p95",
                 "bins": [
                     {
-                        "max": 8.0,
+                        "max": 7.0,
                         "id": 1
                     },
                     {
-                        "min": 8.0,
-                        "max": 12.0,
+                        "min": 7.0,
+                        "max": 36.0,
                         "id": 2
                     },
                     {
-                        "min": 12.0,
-                        "max": 16.0,
+                        "min": 36.0,
+                        "max": 38.0,
                         "id": 3
                     },
                     {
-                        "min": 16.0,
-                        "max": 20.0,
+                        "min": 38.0,
+                        "max": 40.0,
                         "id": 4
                     },
                     {
-                        "min": 20.0,
+                        "min": 40.0,
                         "id": 5
                     }
                 ]
@@ -110,11 +126,11 @@
         }
     },
     "delivery_config": {
-        "delivery_code": "d04",
-        "parcel_id_suffix": "calibration",
+        "delivery_code": "d01",
+        "parcel_id_suffix": "control",
         "date_today": "20250627",
         "date_formatted": "2025-06-27",
-        "base_prefix": "",
+        "base_prefix": "afuy25",
         "custom_suffix": "",
         "subdirectories": {
             "results": "results",
@@ -125,29 +141,31 @@
             "description": "",
             "version": "",
             "operator": "",
-            "timestamp": "2025-06-27T09:12:22.766334"
+            "timestamp": "2025-06-30T08:11:41.214867"
         }
     },
     "column_order_config": {
-        "file_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627/results/20250617_D01_PARCELAS_FINALES.gpkg",
-        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627/results/20250617_D04_PARCELAS_FINALES_ordenados.gpkg",
+        "file_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627_v2\\results\\20250627_D04_PARCELAS_FINALES.gpkg",
+        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627_v2/results/20250627_D04_PARCELAS_FINALES_ordenadas.gpkg",
         "create_backup": false,
         "geometry_first": false,
         "column_order": [
             "geom",
-            "id_parcel",
-            "predio",
-            "rodal",
-            "talhao",
-            "tipouso",
-            "tipomateri",
-            "anoplantac",
-            "mesplantac",
             "gridcode",
             "group_id",
+            "id_parcela",
+            "area_m2",
             "punto_x",
             "punto_y",
-            "area_m2"
+            "index",
+            "predio",
+            "rodal",
+            "anoplantac",
+            "talhao",
+            "mesplantac",
+            "tipouso",
+            "tipomateri",
+            "id_parcel"
         ]
     },
     "ui_log_level": "INFO"

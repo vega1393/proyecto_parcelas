@@ -39,6 +39,10 @@ class ParcelGeneratorApp(QMainWindow):
         
         # Configuración de logging UI (por defecto INFO)
         self.ui_log_level = "INFO"
+        
+        # Cache para prevenir logs duplicados
+        self._recent_logs: Dict[str, float] = {}
+        self._log_cache_max_age = 2.0  # segundos
 
         self._init_ui()
         self._connect_signals()
@@ -218,9 +222,12 @@ class ParcelGeneratorApp(QMainWindow):
 
     def _on_sampling_config_changed(self, sampling_config: Dict[str, Any]):
         """Maneja cambios en la configuración de muestreo."""
-        self.pipeline_config['SAMPLING_CONFIG'] = sampling_config
-        method = "CSV-based" if sampling_config.get("use_csv") else "Intensity-based"
-        self.log_text.append(f"[INFO] Sampling method updated: {method}")
+        # Solo actualizar si realmente cambió para evitar mensajes duplicados
+        previous_config = self.pipeline_config.get('SAMPLING_CONFIG', {})
+        if previous_config != sampling_config:
+            self.pipeline_config['SAMPLING_CONFIG'] = sampling_config
+            method = "CSV-based" if sampling_config.get("use_csv") else "Intensity-based"
+            self._add_throttled_log(f"[INFO] Sampling method updated: {method}")
 
     def _on_gridcode_config_changed(self, gridcode_config: Dict[str, Any]):
         """Maneja cambios en la configuración de GridCode."""
@@ -229,9 +236,9 @@ class ParcelGeneratorApp(QMainWindow):
         if previous_config != gridcode_config:
             self.pipeline_config['GRIDCODE_CONFIG'] = gridcode_config
             if gridcode_config.get('enabled'):
-                self.log_text.append("[INFO] GridCode configuration enabled and updated.")
+                self._add_throttled_log("[INFO] GridCode configuration enabled and updated.")
             else:
-                self.log_text.append("[INFO] GridCode configuration disabled.")
+                self._add_throttled_log("[INFO] GridCode configuration disabled.")
 
     def _on_delivery_config_changed(self, delivery_config: Dict[str, Any]):
         """Maneja cambios en la configuración de entrega."""
@@ -239,7 +246,7 @@ class ParcelGeneratorApp(QMainWindow):
         previous_config = self.pipeline_config.get('DELIVERY_CONFIG', {})
         if previous_config != delivery_config:
             self.pipeline_config['DELIVERY_CONFIG'] = delivery_config
-            self.log_text.append(f"[INFO] Delivery configuration updated: {delivery_config.get('delivery_code', 'N/A')}")
+            self._add_throttled_log(f"[INFO] Delivery configuration updated: {delivery_config.get('delivery_code', 'N/A')}")
 
     def _on_column_order_config_changed(self, column_order_config: Dict[str, Any]):
         """Maneja cambios en la configuración de orden de columnas."""
@@ -815,6 +822,16 @@ class ParcelGeneratorApp(QMainWindow):
             "gridcode_column_csv": sampling_config.get("gridcode_column_csv"),
             "field_mappings": sampling_config.get("field_mappings", []),
             
+            # Configuración Total-based  
+            "use_total": sampling_config.get("use_total", False),
+            "total_config": {
+                "total_parcels": sampling_config.get("total_parcels", 800),
+                "minimum_type": sampling_config.get("minimum_type", "none"),
+                "minimum_value": sampling_config.get("minimum_value", 0.0),
+                "use_original_area": sampling_config.get("use_original_area", True),
+                "show_preview": sampling_config.get("show_preview", True)
+            } if sampling_config.get("use_total", False) else None,
+            
             # Configuración de entrega
             "delivery_config": delivery_config,
             "delivery_code": delivery_config.get("delivery_code"),
@@ -879,6 +896,16 @@ class ParcelGeneratorApp(QMainWindow):
                 pipeline_config["count_column_csv"] = config.get("count_column_csv")
                 pipeline_config["field_mappings"] = config.get("field_mappings", [])
                 pipeline_config["gridcode_column_csv"] = config.get("gridcode_column_csv")
+            
+            # Agregar configuración Total-based
+            if config.get("use_total"):
+                pipeline_config["use_total"] = True
+                total_config = config.get("total_config", {})
+                pipeline_config["total_parcels"] = total_config.get("total_parcels", 800)
+                pipeline_config["minimum_type"] = total_config.get("minimum_type", "none")
+                pipeline_config["minimum_value"] = total_config.get("minimum_value", 0.0)
+                pipeline_config["use_original_area"] = total_config.get("use_original_area", True)
+                pipeline_config["show_preview"] = total_config.get("show_preview", True)
             
             cfg_overrides = config.get("cfg_overrides", {})
             po_config = cfg_overrides.get("PO_CONFIG", {})
@@ -1175,3 +1202,19 @@ class ParcelGeneratorApp(QMainWindow):
         # Formatear el mensaje con el nivel apropiado
         formatted_message = f"[{level}] {message}"
         self.log_text.append(formatted_message)
+    
+    def _add_throttled_log(self, message: str):
+        """Añade un log solo si no se ha añadido recientemente (throttling)."""
+        import time
+        current_time = time.time()
+        
+        # Limpiar cache de logs antiguos
+        self._recent_logs = {
+            msg: timestamp for msg, timestamp in self._recent_logs.items()
+            if current_time - timestamp < self._log_cache_max_age
+        }
+        
+        # Solo añadir el log si no se ha visto recientemente
+        if message not in self._recent_logs:
+            self._recent_logs[message] = current_time
+            self.log_text.append(message)

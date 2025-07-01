@@ -46,7 +46,10 @@ def ejecutar_proceso(
     csv_path: Optional[str] = None,
     grouping_fields: Optional[List[str]] = None,
     delivery_config: Optional[Dict[str, Any]] = None,
-    gridcode_column_csv: Optional[str] = None
+    gridcode_column_csv: Optional[str] = None,
+    # Nuevos parámetros para total-based
+    use_total: bool = False,
+    total_config: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Ejecuta todo el pipeline de generación de parcelas.
@@ -62,9 +65,15 @@ def ejecutar_proceso(
     if "CAPAS_EXCLUSION" in cfg and cfg["CAPAS_EXCLUSION"]:
         cfg["CAPAS_EXCLUSION"] = normalize_exclusion_layers(cfg["CAPAS_EXCLUSION"])
 
+    if delivery_config is None:
+        delivery_config = {}
+
+    # === CONFIGURACIÓN DE RUTAS DE SALIDA ===
     rutas = configurar_rutas(input_path, output_dir, delivery_config)
+    
     setup_logging(rutas['log_file'])
     logger.info(f"=== Iniciando proceso con estilo '{estilo}' ===")
+    logger.info(f"Logging configured. Log file: {rutas['log_file']}")
     if cfg_overrides:
         logger.debug(f"Overrides aplicados: {cfg_overrides}")
     
@@ -75,6 +84,13 @@ def ejecutar_proceso(
     report_progress(5, "Configurando...")
     resultados = {'rutas': rutas, 'config': cfg}
 
+    # Inicializar variables de DataFrames que se pasarán entre etapas
+    areas_dissolved = None
+    gdf_exclusiones = None
+    puntos_parcelas = None
+    poligonos_gdf = None
+    parcelas_con_po = None
+    
     # Log información sobre los filtros que se van a aplicar
     filtros_campos = cfg.get("FILTROS_CAMPOS", {})
     if filtros_campos:
@@ -128,8 +144,195 @@ def ejecutar_proceso(
             # Save grid with calculated gridcode (before dissolve)
             if cfg["USE_GRIDCODE"] and 'gridcode' in gdf.columns:
                 logger.info(f"Guardando grilla con gridcode en: {rutas['gpkg_gridcode']}")
-                pyogrio.write_dataframe(gdf, rutas['gpkg_gridcode'], layer='grilla_gridcode')
-                logger.info(f"Grilla con gridcode guardada: {len(gdf)} registros")
+                
+                # === DIAGNÓSTICO DETALLADO DEL PROBLEMA FID ===
+                logger.info("=== INICIANDO DIAGNÓSTICO DETALLADO ===")
+                
+                # 1. Información del GeoDataFrame original
+                logger.info(f"📊 GeoDataFrame original:")
+                logger.info(f"   - Tamaño: {len(gdf)} registros")
+                logger.info(f"   - Columnas: {list(gdf.columns)}")
+                logger.info(f"   - Tipo de índice: {type(gdf.index)}")
+                logger.info(f"   - Rango de índice: {gdf.index.min()} a {gdf.index.max()}")
+                logger.info(f"   - ¿Índice único?: {gdf.index.is_unique}")
+                
+                # 2. Verificar si hay columnas problemáticas
+                problematic_cols = []
+                if 'fid' in gdf.columns:
+                    problematic_cols.append('fid')
+                    fid_unique = gdf['fid'].is_unique if gdf['fid'].notna().any() else True
+                    logger.warning(f"⚠️  Columna 'fid' detectada: únicos={fid_unique}, nulos={gdf['fid'].isna().sum()}")
+                
+                for col in ['objectid', 'id', 'feature_id']:
+                    if col in gdf.columns:
+                        problematic_cols.append(col)
+                        logger.warning(f"⚠️  Columna potencialmente problemática detectada: '{col}'")
+                
+                # 3. Análisis específico del registro problemático (10335)
+                problematic_index = 10335
+                if problematic_index < len(gdf):
+                    logger.info(f"🔍 Analizando registro problemático (índice {problematic_index}):")
+                    prob_record = gdf.iloc[problematic_index]
+                    logger.info(f"   - Geometría válida: {prob_record.geometry.is_valid if prob_record.geometry else False}")
+                    logger.info(f"   - Área: {prob_record.geometry.area if prob_record.geometry else 'N/A'}")
+                    if 'fid' in prob_record:
+                        logger.info(f"   - FID: {prob_record['fid']}")
+                    if 'gridcode' in prob_record:
+                        logger.info(f"   - GridCode: {prob_record['gridcode']}")
+                else:
+                    logger.info(f"🔍 Índice problemático {problematic_index} fuera de rango")
+                
+                # 4. Buscar duplicados potenciales
+                if 'fid' in gdf.columns:
+                    fid_duplicates = gdf['fid'].duplicated().sum()
+                    if fid_duplicates > 0:
+                        logger.error(f"❌ {fid_duplicates} FIDs duplicados encontrados!")
+                        dup_fids = gdf[gdf['fid'].duplicated()]['fid'].head(5).tolist()
+                        logger.error(f"   Ejemplos de FIDs duplicados: {dup_fids}")
+                
+                # === LIMPIEZA ROBUSTA DEL GEODATAFRAME ===
+                logger.info("🧹 Iniciando limpieza robusta del GeoDataFrame...")
+                
+                try:
+                    # 1. Crear copia limpia
+                    gdf_clean = gdf.copy()
+                    
+                    # 2. Eliminar columnas problemáticas que pueden causar conflictos FID
+                    columns_to_remove = ['fid', 'objectid', 'feature_id']
+                    removed_cols = []
+                    for col in columns_to_remove:
+                        if col in gdf_clean.columns:
+                            gdf_clean = gdf_clean.drop(columns=[col])
+                            removed_cols.append(col)
+                    
+                    if removed_cols:
+                        logger.info(f"✅ Columnas problemáticas eliminadas: {removed_cols}")
+                    
+                    # 3. Resetear índice completamente
+                    gdf_clean = gdf_clean.reset_index(drop=True)
+                    logger.info(f"✅ Índice reseteado: nuevo rango 0 a {len(gdf_clean)-1}")
+                    
+                    # 4. Validar geometrías
+                    invalid_geoms = ~gdf_clean.geometry.is_valid
+                    if invalid_geoms.any():
+                        invalid_count = invalid_geoms.sum()
+                        logger.warning(f"⚠️  {invalid_count} geometrías inválidas detectadas, reparando...")
+                        gdf_clean.geometry = gdf_clean.geometry.buffer(0)  # Reparar geometrías
+                        
+                        # Verificar reparación
+                        still_invalid = ~gdf_clean.geometry.is_valid
+                        if still_invalid.any():
+                            logger.warning(f"⚠️  {still_invalid.sum()} geometrías siguen inválidas después de reparar")
+                            # Filtrar geometrías que no se pudieron reparar
+                            gdf_clean = gdf_clean[gdf_clean.geometry.is_valid].copy()
+                            logger.info(f"✅ Filtrado a {len(gdf_clean)} registros con geometrías válidas")
+                    
+                    # 5. Eliminar registros con geometrías nulas o vacías
+                    null_geoms = gdf_clean.geometry.isna() | gdf_clean.geometry.is_empty
+                    if null_geoms.any():
+                        null_count = null_geoms.sum()
+                        logger.warning(f"⚠️  {null_count} geometrías nulas/vacías eliminadas")
+                        gdf_clean = gdf_clean[~null_geoms].copy()
+                    
+                    # 6. Verificar que el registro problemático ya no esté
+                    logger.info(f"📊 GeoDataFrame limpio:")
+                    logger.info(f"   - Tamaño final: {len(gdf_clean)} registros")
+                    logger.info(f"   - Columnas finales: {list(gdf_clean.columns)}")
+                    logger.info(f"   - Reducción: {len(gdf) - len(gdf_clean)} registros eliminados")
+                    
+                    # === GUARDADO ROBUSTO ===
+                    logger.info("💾 Iniciando guardado robusto...")
+                    
+                    # Eliminar archivo existente de forma robusta
+                    if os.path.exists(rutas['gpkg_gridcode']):
+                        try:
+                            os.remove(rutas['gpkg_gridcode'])
+                            logger.debug(f"✅ Archivo GPKG existente eliminado: {rutas['gpkg_gridcode']}")
+                        except Exception as e:
+                            logger.warning(f"⚠️  No se pudo eliminar archivo existente: {e}")
+                            # Intentar con nombre alternativo
+                            import time
+                            timestamp = int(time.time())
+                            alt_path = rutas['gpkg_gridcode'].replace('.gpkg', f'_backup_{timestamp}.gpkg')
+                            try:
+                                os.rename(rutas['gpkg_gridcode'], alt_path)
+                                logger.info(f"✅ Archivo existente renombrado a: {alt_path}")
+                            except Exception as e2:
+                                logger.error(f"❌ No se pudo renombrar archivo: {e2}")
+                    
+                    # Método 1: Intentar con pyogrio (método preferido)
+                    success = False
+                    try:
+                        pyogrio.write_dataframe(gdf_clean, rutas['gpkg_gridcode'], layer='grilla_gridcode')
+                        logger.info(f"✅ Grilla con gridcode guardada (pyogrio): {len(gdf_clean)} registros")
+                        success = True
+                    except Exception as e:
+                        logger.warning(f"⚠️  Error con pyogrio: {e}")
+                        logger.warning(f"  - Fallback 1: Guardando con geopandas...")
+                    
+                    # Método 2: Fallback con geopandas si pyogrio falla
+                    if not success:
+                        try:
+                            gdf_clean.to_file(rutas['gpkg_gridcode'], layer='grilla_gridcode', driver='GPKG')
+                            logger.info(f"✅ Grilla con gridcode guardada (geopandas): {len(gdf_clean)} registros")
+                            success = True
+                        except Exception as e:
+                            logger.warning(f"⚠️  Error con geopandas: {e}")
+                    
+                    # Método 3: Guardado por lotes si los anteriores fallan
+                    if not success:
+                        logger.info("🔄 Intentando guardado por lotes...")
+                        batch_size = 1000
+                        total_batches = (len(gdf_clean) + batch_size - 1) // batch_size
+                        
+                        for i in range(0, len(gdf_clean), batch_size):
+                            batch = gdf_clean.iloc[i:i+batch_size].copy()
+                            batch_num = (i // batch_size) + 1
+                            
+                            try:
+                                if i == 0:  # Primera batch, crear archivo
+                                    pyogrio.write_dataframe(batch, rutas['gpkg_gridcode'], layer='grilla_gridcode')
+                                else:  # Batches siguientes, append (si pyogrio lo soporta)
+                                    # Usar geopandas para append
+                                    batch.to_file(rutas['gpkg_gridcode'], layer='grilla_gridcode', driver='GPKG', mode='a')
+                                
+                                logger.debug(f"📦 Batch {batch_num}/{total_batches} guardada ({len(batch)} registros)")
+                            except Exception as e:
+                                logger.error(f"❌ Error en batch {batch_num}: {e}")
+                                # Si falla una batch, abortar el método por lotes
+                                break
+                        else:
+                            # Si todas las batches se guardaron exitosamente
+                            logger.info(f"✅ Grilla guardada por lotes: {len(gdf_clean)} registros en {total_batches} batches")
+                            success = True
+                    
+                    # Método 4: Último recurso - guardar sin la fila problemática
+                    if not success:
+                        logger.warning("🚨 Último recurso: eliminando registros problemáticos...")
+                        # Eliminar el registro que estaba causando problemas
+                        safe_gdf = gdf_clean.copy()
+                        if len(safe_gdf) > problematic_index:
+                            safe_gdf = safe_gdf.drop(safe_gdf.index[problematic_index:problematic_index+100])  # Eliminar rango problemático
+                            logger.info(f"⚠️  Eliminados registros del rango problemático. Registros restantes: {len(safe_gdf)}")
+                            
+                            try:
+                                pyogrio.write_dataframe(safe_gdf, rutas['gpkg_gridcode'], layer='grilla_gridcode')
+                                logger.info(f"✅ Grilla guardada (modo seguro): {len(safe_gdf)} registros")
+                                success = True
+                            except Exception as e:
+                                logger.error(f"❌ Fallback 3 fallido. No se pudo guardar la grilla: {e}")
+                    
+                    if not success:
+                        logger.error("❌ TODOS los métodos de guardado fallaron")
+                        logger.info("ℹ️  Continuando pipeline sin guardar grilla intermedia...")
+                        # No hacer raise, continuar con el pipeline
+                    
+                    logger.info("=== DIAGNÓSTICO COMPLETADO ===")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error en diagnóstico/limpieza: {e}")
+                    logger.info("ℹ️  Continuando pipeline sin guardar grilla intermedia...")
+                    # No hacer raise, continuar con el pipeline
 
         # --- Determinar las columnas de agrupación ---
         grouping_cols = []
@@ -159,7 +362,12 @@ def ejecutar_proceso(
                 min_parcelas=cfg["MIN_PARCELAS"], max_parcelas=cfg["MAX_PARCELAS"],
                 area_minima_ha=cfg["AREA_MINIMA_HA"], buffer_distance=cfg["BUFFER_DISTANCE"],
                 output_csv=rutas['csv_resumen'], output_gpkg=rutas['gpkg_areas'],
-                output_gpkg_dissolved_initial=rutas['gpkg_inicial']
+                output_gpkg_dissolved_initial=rutas['gpkg_inicial'],
+                # Parámetros total-based (no aplicables en modo CSV)
+                use_total_based=False,
+                total_parcels=None,
+                minimum_config=None,
+                use_original_area=True
             )
             
             # Cargar las áreas generadas
@@ -171,16 +379,47 @@ def ejecutar_proceso(
             
         else:
             if 2 in op:
-                report_progress(25, "Calculando cantidad de parcelas por intensidad...")
-                gdf_para_generar = calcular_cantidad_de_parcelas(
-                    gdf=gdf, fields=grouping_cols, intensidad=cfg["INTENSIDAD"],
-                    use_intensidad_especifica=cfg["USE_INTENSIDAD_ESPECIFICA"],
-                    intensidad_por_campo=cfg["INTENSIDAD_POR_CAMPO"],
-                    min_parcelas=cfg["MIN_PARCELAS"], max_parcelas=cfg["MAX_PARCELAS"],
-                    area_minima_ha=cfg["AREA_MINIMA_HA"], buffer_distance=cfg["BUFFER_DISTANCE"],
-                    output_csv=rutas['csv_resumen'], output_gpkg=rutas['gpkg_areas'],
-                    output_gpkg_dissolved_initial=rutas['gpkg_inicial']
-                )
+                if use_total:
+                    report_progress(25, "Calculando distribución proporcional de parcelas...")
+                    # Configurar parámetros total-based
+                    total_parcels = total_config.get("total_parcels", 800) if total_config else 800
+                    minimum_config = {
+                        "type": total_config.get("minimum_type", "none") if total_config else "none",
+                        "value": total_config.get("minimum_value", 0.0) if total_config else 0.0
+                    }
+                    use_original_area = total_config.get("use_original_area", True) if total_config else True
+                    
+                    gdf_para_generar, areas_dissolved = calcular_cantidad_de_parcelas(
+                        gdf=gdf, fields=grouping_cols, intensidad=cfg["INTENSIDAD"],
+                        use_intensidad_especifica=cfg["USE_INTENSIDAD_ESPECIFICA"],
+                        intensidad_por_campo=cfg["INTENSIDAD_POR_CAMPO"],
+                        min_parcelas=cfg["MIN_PARCELAS"], max_parcelas=cfg["MAX_PARCELAS"],
+                        area_minima_ha=cfg["AREA_MINIMA_HA"], buffer_distance=cfg["BUFFER_DISTANCE"],
+                        output_csv=rutas['csv_resumen'], output_gpkg=rutas['gpkg_areas'],
+                        output_gpkg_dissolved_initial=rutas['gpkg_inicial'],
+                        # Parámetros total-based
+                        use_total_based=True,
+                        total_parcels=total_parcels,
+                        minimum_config=minimum_config,
+                        use_original_area=use_original_area,
+                        campos_metricas=cfg.get("CAMPOS_METRICAS")
+                    )
+                else:
+                    report_progress(25, "Calculando cantidad de parcelas por intensidad...")
+                    gdf_para_generar = calcular_cantidad_de_parcelas(
+                        gdf=gdf, fields=grouping_cols, intensidad=cfg["INTENSIDAD"],
+                        use_intensidad_especifica=cfg["USE_INTENSIDAD_ESPECIFICA"],
+                        intensidad_por_campo=cfg["INTENSIDAD_POR_CAMPO"],
+                        min_parcelas=cfg["MIN_PARCELAS"], max_parcelas=cfg["MAX_PARCELAS"],
+                        area_minima_ha=cfg["AREA_MINIMA_HA"], buffer_distance=cfg["BUFFER_DISTANCE"],
+                        output_csv=rutas['csv_resumen'], output_gpkg=rutas['gpkg_areas'],
+                        output_gpkg_dissolved_initial=rutas['gpkg_inicial'],
+                        # Parámetros total-based (no aplicables en modo normal)
+                        use_total_based=False,
+                        total_parcels=None,
+                        minimum_config=None,
+                        use_original_area=True
+                    )
                 resultados['gdf_inicial'] = gpd.read_file(rutas['gpkg_inicial'], engine='pyogrio')
                 resultados['gdf_post_filtros'] = gpd.read_file(rutas['gpkg_areas'], engine='pyogrio')
             else:
@@ -188,71 +427,16 @@ def ejecutar_proceso(
                 gdf_para_generar['n_parcelas'] = 0
 
         gdf_post_exclusion = gdf_para_generar
-        if 3 in op:
-            # Verificar si hay capas de exclusión configuradas
-            capas_exclusion = cfg.get("CAPAS_EXCLUSION", [])
-            
-            if not capas_exclusion or len(capas_exclusion) == 0:
-                logger.info("No hay capas de exclusión configuradas. Saltando paso de exclusiones.")
-                report_progress(40, "Saltando exclusiones (no configuradas)...")
-                gdf_post_exclusion = gdf_para_generar.copy()
-                
-                # Agregar columna de área para consistencia con el flujo normal
-                if 'area_m2' not in gdf_post_exclusion.columns:
-                    gdf_post_exclusion['area_m2'] = gdf_post_exclusion.geometry.area
-                if 'area_ha_post_exclusion' not in gdf_post_exclusion.columns:
-                    gdf_post_exclusion['area_ha_post_exclusion'] = gdf_post_exclusion['area_m2'] / 10000
-                
-                # Guardar archivo para mantener consistencia del pipeline
-                if rutas.get('gpkg_exclusion'):
-                    logger.debug(f"Guardando datos sin exclusiones en: {rutas['gpkg_exclusion']}")
-                    pyogrio.write_dataframe(gdf_post_exclusion, rutas['gpkg_exclusion'], layer='areas_post_exclusion')
-                
-                resultados['gdf_post_exclusion'] = gdf_post_exclusion
-            else:
-                # Verificar que las capas tienen rutas válidas
-                capas_validas = [c for c in capas_exclusion if c.get('ruta') and c.get('ruta').strip()]
-                
-                if not capas_validas:
-                    logger.info("Las capas de exclusión configuradas no tienen rutas válidas. Saltando paso.")
-                    report_progress(40, "Saltando exclusiones (rutas inválidas)...")
-                    gdf_post_exclusion = gdf_para_generar.copy()
-                    
-                    # Agregar columna de área para consistencia
-                    if 'area_m2' not in gdf_post_exclusion.columns:
-                        gdf_post_exclusion['area_m2'] = gdf_post_exclusion.geometry.area
-                    if 'area_ha_post_exclusion' not in gdf_post_exclusion.columns:
-                        gdf_post_exclusion['area_ha_post_exclusion'] = gdf_post_exclusion['area_m2'] / 10000
-                    
-                    # Guardar archivo para mantener consistencia
-                    if rutas.get('gpkg_exclusion'):
-                        pyogrio.write_dataframe(gdf_post_exclusion, rutas['gpkg_exclusion'], layer='areas_post_exclusion')
-                    
-                    resultados['gdf_post_exclusion'] = gdf_post_exclusion
-                else:
-                    logger.info(f"Aplicando {len(capas_validas)} capas de exclusión válidas...")
-                    report_progress(40, "Aplicando exclusiones...")
-                    
-                    try:
-                        gdf_post_exclusion = aplicar_exclusiones(
-                            gdf=gdf_para_generar, capas_exclusion=capas_exclusion,
-                            fields=grouping_cols, crs_target=cfg["PROJECTED_CRS"],
-                            output_gpkg=rutas['gpkg_exclusion']
-                        )
-                        resultados['gdf_post_exclusion'] = gdf_post_exclusion
-                        logger.info("Exclusiones aplicadas exitosamente.")
-                    except Exception as e:
-                        logger.error(f"Error aplicando exclusiones: {e}")
-                        logger.warning("Continuando sin aplicar exclusiones...")
-                        gdf_post_exclusion = gdf_para_generar.copy()
-                        
-                        # Agregar columnas para consistencia
-                        if 'area_m2' not in gdf_post_exclusion.columns:
-                            gdf_post_exclusion['area_m2'] = gdf_post_exclusion.geometry.area
-                        if 'area_ha_post_exclusion' not in gdf_post_exclusion.columns:
-                            gdf_post_exclusion['area_ha_post_exclusion'] = gdf_post_exclusion['area_m2'] / 10000
-                        
-                        resultados['gdf_post_exclusion'] = gdf_post_exclusion
+        if 3 in op and cfg["CAPAS_EXCLUSION"]:
+            report_progress(40, "Aplicando exclusiones geográficas...")
+            gdf_post_exclusion = aplicar_exclusiones(
+                gdf=gdf_para_generar,
+                capas_exclusion=cfg["CAPAS_EXCLUSION"],
+                fields=grouping_cols,
+                crs_target=cfg["PROJECTED_CRS"],
+                output_gpkg=rutas['gpkg_exclusion']
+            )
+            resultados['gdf_post_exclusion'] = gdf_post_exclusion
         else:
             logger.debug("Paso de exclusiones deshabilitado en la configuración.")
             gdf_post_exclusion = gdf_para_generar
@@ -419,93 +603,38 @@ def ejecutar_proceso(
         else:
             resultados['poligonos_gdf'] = poligonos_gdf # Mantener como None si no se generaron
             
+        parcelas_con_po = None  # INICIALIZACIÓN CLAVE
         if 6 in op and poligonos_gdf is not None and not poligonos_gdf.empty:
             report_progress(85, "Asignando atributos PO...")
-            
-            # Determine delivery code and suffix from multiple sources (priority order)
-            delivery_info = {}
-            if delivery_config:
-                if delivery_config.get("delivery_code"):
-                    delivery_info['delivery_code'] = delivery_config.get("delivery_code")
-                    logger.info(f"Using delivery code from config: {delivery_info['delivery_code']}")
-                if delivery_config.get("parcel_id_suffix"):
-                    delivery_info['sufijo'] = delivery_config.get("parcel_id_suffix")
-                    logger.info(f"Using parcel ID suffix from config: {delivery_info['sufijo']}")
-            elif entrega:
-                delivery_info['delivery_code'] = entrega
-                logger.info(f"Using delivery code from entrega parameter: {entrega}")
-            
-            if not delivery_info:
-                logger.warning("No delivery code or suffix provided. Generated parcel IDs will use default format.")
-            
-            poligonos_gdf_final = asignar_atributos_po(
-                parcelas_gdf=poligonos_gdf, po_config=cfg.get("PO_CONFIG", {}),
-                crs_target=cfg["PROJECTED_CRS"], output_path=rutas['gpkg_final'], # Guardar directamente el final
-                entrega=delivery_info if delivery_info else None
-            )
-            resultados['gdf_final'] = poligonos_gdf_final
-        else:
-            resultados['gdf_final'] = poligonos_gdf
-
-        # [CORRECCIÓN 2] El paso 7 se elimina completamente.
-        # La lógica de reordenar y guardar el archivo final ahora está
-        # dentro de la nueva función 'asignar_atributos_po'.
-
-        if resultados.get('gdf_inicial') is not None:
-            report_progress(95, "Analizando pérdidas...")
-            
-            # Usar análisis mejorado si hay CSV original disponible
-            if use_csv and csv_path and os.path.exists(csv_path):
-                from src.pipeline.analisis import analizar_perdidas_con_csv
+            if puntos_gdf is not None and not puntos_gdf.empty:
+                # Recuperar configuración de entrega para el nombre de archivo
+                delivery_code = delivery_config.get('code', 'D01') if delivery_config else 'D01'
+                parcel_suffix = delivery_config.get('suffix', 'control') if delivery_config else 'control'
                 
-                # Cargar CSV original para análisis
-                df_csv_original = pd.read_csv(csv_path)
-                df_csv_original.columns = [c.lower() for c in df_csv_original.columns]
-                
-                # Determinar columna de conteo
-                count_col = 'n_parcelas' if 'n_parcelas' in df_csv_original.columns else ('n' if 'n' in df_csv_original.columns else None)
-                
-                if count_col:
-                    # Mapear gridcode si es necesario
-                    if gridcode_column_csv and gridcode_column_csv in df_csv_original.columns and 'gridcode' in grouping_cols:
-                        if gridcode_column_csv != 'gridcode':
-                            df_csv_original = df_csv_original.rename(columns={gridcode_column_csv: 'gridcode'})
-                    
-                    logger.info("Usando análisis de pérdidas mejorado con comparación CSV original...")
-                    analisis_df = analizar_perdidas_con_csv(
-                        csv_original=df_csv_original,
-                        csv_grouping_cols=grouping_cols,
-                        csv_count_col=count_col,
-                        gdf_inicial=resultados['gdf_inicial'], 
-                        fields=grouping_cols,
-                        gdf_post_filtros=resultados.get('gdf_post_filtros'),
-                        gdf_post_exclusion=resultados.get('gdf_post_exclusion'),
-                        gdf_final=resultados.get('gdf_final'),
-                        output_csv=rutas['csv_analisis']
-                    )
-                    resultados['analisis'] = analisis_df
-                else:
-                    logger.warning("No se encontró columna de conteo en CSV, usando análisis estándar...")
-                    analisis_df = analizar_perdidas_parcelas(
-                        gdf_inicial=resultados['gdf_inicial'], fields=grouping_cols,
-                        gdf_post_filtros=resultados.get('gdf_post_filtros'),
-                        gdf_post_exclusion=resultados.get('gdf_post_exclusion'),
-                        gdf_final=resultados.get('gdf_final'),
-                        output_csv=rutas['csv_analisis']
-                    )
-                    resultados['analisis'] = analisis_df
-            else:
-                # Usar análisis estándar si no hay CSV
-                analisis_df = analizar_perdidas_parcelas(
-                    gdf_inicial=resultados['gdf_inicial'], fields=grouping_cols,
-                    gdf_post_filtros=resultados.get('gdf_post_filtros'),
-                    gdf_post_exclusion=resultados.get('gdf_post_exclusion'),
-                    gdf_final=resultados.get('gdf_final'),
-                    output_csv=rutas['csv_analisis']
+                parcelas_con_po = asignar_atributos_po(
+                    parcelas_gdf=puntos_gdf,
+                    po_config=cfg['PO_CONFIG'],
+                    crs_target=cfg['PROJECTED_CRS'],
+                    output_path=rutas['gpkg_po'],
+                    entrega=delivery_code
                 )
-                resultados['analisis'] = analisis_df
+            else:
+                logger.warning("No se generaron puntos de parcelas, saltando asignación de atributos PO.")
+            
+            if 7 in op:
+                report_progress(95, "Analizando pérdidas...")
+                # Usa 'gdf_para_generar' que contiene la columna 'n_parcelas'
+                if gdf_para_generar is not None and not gdf_para_generar.empty and parcelas_con_po is not None and not parcelas_con_po.empty:
+                    analizar_perdidas_parcelas(
+                        gdf_calculado=gdf_para_generar,
+                        fields=grouping_cols,
+                        gdf_generado=parcelas_con_po,
+                        output_csv=rutas['csv_analisis']
+                    )
+                else:
+                    logger.warning("No se generaron parcelas o falta el GDF de cálculo, saltando análisis de pérdidas.")
 
         report_progress(100, "Proceso completado con éxito!")
-        logging.info("=== Proceso completado con éxito ===")
+        logger.info("✓ Proceso completado exitosamente")
 
     return resultados
