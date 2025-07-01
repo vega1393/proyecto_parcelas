@@ -836,7 +836,6 @@ class ParcelGeneratorApp(QMainWindow):
             "delivery_config": delivery_config,
             "delivery_code": delivery_config.get("delivery_code"),
             "date_today": delivery_config.get("date_today"),
-            "delivery_metadata": delivery_config.get("metadata", {}),
             
             # Metadatos
             "generated_at": datetime.now().isoformat(),
@@ -920,8 +919,7 @@ class ParcelGeneratorApp(QMainWindow):
             # NUEVO: Configuración de entrega
             delivery_config = {
                 "delivery_code": config.get("delivery_code", ""),
-                "date_today": config.get("date_today", ""),
-                "metadata": config.get("delivery_metadata", {})
+                "date_today": config.get("date_today", "")
             }
             
             # NUEVOS

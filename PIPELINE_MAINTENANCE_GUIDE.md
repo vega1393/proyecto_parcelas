@@ -147,6 +147,25 @@ parcelas_con_po     # Con atributos PO
 # Solución: Cambiar parcelas_gdf=puntos_gdf por parcelas_gdf=poligonos_gdf
 ```
 
+### 7. **Actualización: Constantes ahora configurables desde GUI**
+```bash
+# MEJORADO: Números mágicos ahora son configurables
+# Pipeline Tab → Area and Distance Parameters:
+#   • Min pixel area (m²): 399 → Filtro de píxeles pequeños
+#   • Min p95 height: 2.0 → Filtro de vegetación baja  
+#   • Parcel area (m²): 400 → Tamaño objetivo de parcelas
+# Archivo: src/config/constants.py (documentación)
+# Beneficio: Usuarios pueden ajustar sin modificar código
+```
+
+### 8. **Limpieza: Eliminados campos de metadata no utilizados**
+```bash
+# LIMPIADO: Eliminados campos de metadata del Delivery Tab
+# Campos removidos: description, version, operator, timestamp
+# Motivo: Solo se almacenaban, no se usaban en el pipeline
+# Beneficio: Interfaz más limpia y enfocada en funcionalidad real
+```
+
 ### 2. **Error: "No quedan registros después de filtros"**
 ```bash
 # Verificar filtros en configuración

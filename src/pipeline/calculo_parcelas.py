@@ -30,7 +30,9 @@ def calcular_cantidad_de_parcelas(
     total_parcels: Optional[int] = None,
     minimum_config: Optional[Dict[str, Any]] = None,
     campos_metricas: Optional[Dict[str, str]] = None,
-    use_original_area: bool = True  # DEPRECATED en la lógica, se mantiene por firma
+    use_original_area: bool = True,  # DEPRECATED en la lógica, se mantiene por firma
+    # Nuevos parámetros configurables desde GUI
+    cfg: Optional[Dict[str, Any]] = None
 ) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Calcula la cantidad de parcelas necesarias por grupo.
@@ -78,9 +80,16 @@ def calcular_cantidad_de_parcelas(
 
     # --- PASO 2: Filtrado de calidad de píxeles ---
     logger.info(f"Registros antes de filtrar por calidad de píxeles: {len(gdf_processed)}")
+    # Obtener valores configurables desde GUI o usar defaults
+    min_pixel_area = 399
+    min_p95_height = 2.0
+    if cfg:
+        min_pixel_area = cfg.get('MIN_PIXEL_AREA_M2', 399)
+        min_p95_height = cfg.get('MIN_P95_HEIGHT', 2.0)
+    
     gdf_processed['area_m2_pixel'] = gdf_processed.geometry.area
-    gdf_filtered_pixels = gdf_processed[gdf_processed['area_m2_pixel'] >= 399].copy()
-    logger.info(f"Registros después de filtrar <399 m2: {len(gdf_filtered_pixels)}")
+    gdf_filtered_pixels = gdf_processed[gdf_processed['area_m2_pixel'] >= min_pixel_area].copy()
+    logger.info(f"Registros después de filtrar <{min_pixel_area} m2: {len(gdf_filtered_pixels)}")
 
     # [CORREGIDO] Usar el nombre del campo p95 desde la configuración
     p95_field = "p95" # Valor por defecto
@@ -90,9 +99,9 @@ def calcular_cantidad_de_parcelas(
     if p95_field in gdf_filtered_pixels.columns:
         p95_before_count = len(gdf_filtered_pixels)
         gdf_filtered_pixels[p95_field] = pd.to_numeric(gdf_filtered_pixels[p95_field], errors='coerce').fillna(0)
-        gdf_filtered_pixels = gdf_filtered_pixels[gdf_filtered_pixels[p95_field] >= 2].copy()
-        logger.info(f"Registros antes de filtrar píxeles p95<2: {p95_before_count}")
-        logger.info(f"Registros después de filtrar p95<2: {len(gdf_filtered_pixels)}")
+        gdf_filtered_pixels = gdf_filtered_pixels[gdf_filtered_pixels[p95_field] >= min_p95_height].copy()
+        logger.info(f"Registros antes de filtrar píxeles p95<{min_p95_height}: {p95_before_count}")
+        logger.info(f"Registros después de filtrar p95<{min_p95_height}: {len(gdf_filtered_pixels)}")
 
     if gdf_filtered_pixels.empty:
         logger.warning("No hay registros después de los filtros de calidad de píxeles. El resultado estará vacío.")

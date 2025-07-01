@@ -7,7 +7,7 @@ from typing import Dict, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QLineEdit, QPushButton, 
     QLabel, QScrollArea, QGroupBox, QDateEdit, QComboBox,
-    QHBoxLayout, QMessageBox, QTextEdit
+    QHBoxLayout, QMessageBox, QTextEdit, QSizePolicy
 )
 from PyQt6.QtCore import pyqtSignal, QDate
 
@@ -110,9 +110,15 @@ class DeliveryTab(QWidget):
         preview_layout = QVBoxLayout(preview_group)
         
         self.preview_text = QTextEdit()
-        self.preview_text.setMaximumHeight(120)
+        # Configurar altura dinámica con límites
+        self.preview_text.setMinimumHeight(150)  # Altura mínima
+        self.preview_text.setMaximumHeight(300)  # Altura máxima controlada
         self.preview_text.setReadOnly(True)
         self.preview_text.setPlaceholderText("File naming preview will appear here...")
+        
+        # Configurar política de tamaño para mejor adaptación
+        self.preview_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        
         preview_layout.addWidget(self.preview_text)
         
         # Botón de actualizar preview
@@ -122,26 +128,7 @@ class DeliveryTab(QWidget):
         
         form_layout.addWidget(preview_group)
 
-        # --- Configuración de Metadatos ---
-        metadata_group = QGroupBox("Metadata")
-        metadata_layout = QFormLayout(metadata_group)
-        
-        # Descripción del proceso
-        self.description_line = QLineEdit()
-        self.description_line.setPlaceholderText("Brief description of this processing run")
-        metadata_layout.addRow("Description:", self.description_line)
-        
-        # Versión
-        self.version_line = QLineEdit()
-        self.version_line.setPlaceholderText("e.g., 1.0, v2.1")
-        metadata_layout.addRow("Version:", self.version_line)
-        
-        # Usuario/Operador
-        self.operator_line = QLineEdit()
-        self.operator_line.setPlaceholderText("Who is running this process")
-        metadata_layout.addRow("Operator:", self.operator_line)
-        
-        form_layout.addWidget(metadata_group)
+
 
         scroll.setWidget(content_widget)
         main_layout.addWidget(scroll)
@@ -160,9 +147,6 @@ class DeliveryTab(QWidget):
         self.results_subdir_line.textChanged.connect(self._emit_config_changed)
         self.logs_subdir_line.textChanged.connect(self._emit_config_changed)
         self.summary_subdir_line.textChanged.connect(self._emit_config_changed)
-        self.description_line.textChanged.connect(self._emit_config_changed)
-        self.version_line.textChanged.connect(self._emit_config_changed)
-        self.operator_line.textChanged.connect(self._emit_config_changed)
 
         # Conectar cambios para actualizar preview automáticamente
         self.delivery_code_line.textChanged.connect(self._update_preview)
@@ -178,12 +162,7 @@ class DeliveryTab(QWidget):
         default_code = f"d{today.strftime('%m%d')}"
         self.delivery_code_line.setText(default_code)
         
-        # Usuario actual (si está disponible)
-        try:
-            import getpass
-            self.operator_line.setText(getpass.getuser())
-        except:
-            pass
+
         
         # Actualizar preview inicial
         self._update_preview()
@@ -225,35 +204,56 @@ class DeliveryTab(QWidget):
             for file_type, filename in examples.items():
                 preview_text += f"{file_type}:\n  {filename}\n\n"
             
-            # Agregar ejemplo de ID de parcela
-            delivery_code = self.delivery_code_line.text().strip()
-            parcel_suffix = self.parcel_id_suffix_line.text().strip()
-            
-            preview_text += "Parcel ID format example:\n"
-            if delivery_code and parcel_suffix:
-                preview_text += f"  EUUG_4622_001_{delivery_code}_{parcel_suffix}\n"
-            elif delivery_code:
-                preview_text += f"  EUUG_4622_001_{delivery_code}\n"
-            elif parcel_suffix:
-                preview_text += f"  EUUG_4622_001_NO_DELIVERY_{parcel_suffix}\n"
-            else:
-                preview_text += f"  EUUG_4622_001_NO_DELIVERY\n"
-            preview_text += "  (tipouso_predio_###_delivery_suffix)\n\n"
-            
-            # Agregar estructura de directorios
+            # Agregar información sobre estructura de directorios
             results_dir = self.results_subdir_line.text().strip() or "results"
             logs_dir = self.logs_subdir_line.text().strip() or "logs"
             summary_dir = self.summary_subdir_line.text().strip() or "summary"
             
-            preview_text += "Directory structure:\n"
+            preview_text += f"Directory structure:\n"
             preview_text += f"  📁 {results_dir}/\n"
             preview_text += f"  📁 {logs_dir}/\n"
-            preview_text += f"  📁 {summary_dir}/\n"
+            preview_text += f"  📁 {summary_dir}/\n\n"
+            
+            # Agregar información sobre IDs de parcela
+            parcel_suffix = self.parcel_id_suffix_line.text().strip()
+            delivery_code = self.delivery_code_line.text().strip()
+            
+            parcel_id_example = "tipouso_predio_001"
+            if delivery_code:
+                parcel_id_example += f"_{delivery_code}"
+            if parcel_suffix:
+                parcel_id_example += f"_{parcel_suffix}"
+                
+            preview_text += f"Parcel ID example:\n  {parcel_id_example}"
             
             self.preview_text.setPlainText(preview_text)
             
+            # Ajustar altura dinámicamente basado en contenido
+            self._adjust_preview_height()
+            
         except Exception as e:
-            self.preview_text.setPlainText(f"Error generating preview: {e}")
+            self.preview_text.setPlainText(f"Error generating preview: {str(e)}")
+
+    def _adjust_preview_height(self) -> None:
+        """Ajusta la altura del preview basado en el contenido."""
+        try:
+            # Calcular altura necesaria basada en número de líneas
+            document = self.preview_text.document()
+            document_height = document.size().height()
+            
+            # Agregar margen para scrollbar y padding
+            needed_height = int(document_height + 20)
+            
+            # Aplicar límites mínimo y máximo
+            min_height = 150
+            max_height = 350  # Aumentado ligeramente
+            
+            final_height = max(min_height, min(needed_height, max_height))
+            self.preview_text.setFixedHeight(final_height)
+            
+        except Exception:
+            # Si hay error, usar altura por defecto
+            self.preview_text.setFixedHeight(200)
 
     def _emit_config_changed(self) -> None:
         """Emite la señal de cambio de configuración."""
@@ -275,12 +275,6 @@ class DeliveryTab(QWidget):
                 "results": self.results_subdir_line.text().strip() or "results",
                 "logs": self.logs_subdir_line.text().strip() or "logs", 
                 "summary": self.summary_subdir_line.text().strip() or "summary"
-            },
-            "metadata": {
-                "description": self.description_line.text().strip(),
-                "version": self.version_line.text().strip(),
-                "operator": self.operator_line.text().strip(),
-                "timestamp": datetime.now().isoformat()
             }
         }
         
@@ -315,12 +309,6 @@ class DeliveryTab(QWidget):
         self.results_subdir_line.setText(subdirs.get("results", "results"))
         self.logs_subdir_line.setText(subdirs.get("logs", "logs"))
         self.summary_subdir_line.setText(subdirs.get("summary", "summary"))
-        
-        # Metadatos
-        metadata = config.get("metadata", {})
-        self.description_line.setText(metadata.get("description", ""))
-        self.version_line.setText(metadata.get("version", ""))
-        self.operator_line.setText(metadata.get("operator", ""))
         
         # Restaurar señales
         self.delivery_code_line.blockSignals(False)

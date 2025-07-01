@@ -478,7 +478,8 @@ def ejecutar_proceso(
                 use_total_based=False,
                 total_parcels=None,
                 minimum_config=None,
-                use_original_area=True
+                use_original_area=True,
+                cfg=cfg  # Pasar configuración para constantes
             )
             
             # Cargar las áreas generadas
@@ -516,7 +517,8 @@ def ejecutar_proceso(
                         total_parcels=total_parcels,
                         minimum_config=minimum_config,
                         use_original_area=use_original_area,
-                        campos_metricas=cfg.get("CAMPOS_METRICAS")
+                        campos_metricas=cfg.get("CAMPOS_METRICAS"),
+                        cfg=cfg  # Pasar configuración para constantes
                     )
                 else:
                     # ═══════════════════════════════════════════════════════════════════════════════
@@ -535,7 +537,8 @@ def ejecutar_proceso(
                         use_total_based=False,
                         total_parcels=None,
                         minimum_config=None,
-                        use_original_area=True
+                        use_original_area=True,
+                        cfg=cfg  # Pasar configuración para constantes
                     )
                 resultados['gdf_inicial'] = gpd.read_file(rutas['gpkg_inicial'], engine='pyogrio')
                 resultados['gdf_post_filtros'] = gpd.read_file(rutas['gpkg_areas'], engine='pyogrio')

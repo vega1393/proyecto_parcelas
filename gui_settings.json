@@ -1,7 +1,7 @@
 {
     "pipeline_config": {
-        "input_path": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/03_metricas/grilla_metrica_prioritarios_v2.gpkg",
-        "output_dir": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/02_parcel/control_plots/plots_afuy_control_v02_prioritarios_20250627",
+        "input_path": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/03_metricas/grilla_metrica_noprioritarios_v2.gpkg",
+        "output_dir": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/02_parcel/control_plots/plots_afuy_control_v01_noprioritarios_20250627",
         "style": "custom",
         "grouping_fields": [
             "ID_PREDIO",
@@ -12,8 +12,11 @@
         "cfg_overrides": {
             "PROJECTED_CRS": 32721,
             "AREA_MINIMA_HA": 0.0,
-            "BUFFER_DISTANCE": -12,
+            "BUFFER_DISTANCE": -13,
             "MIN_DISTANCE": 120.0,
+            "MIN_PIXEL_AREA_M2": 399,
+            "MIN_P95_HEIGHT": 2.0,
+            "AREA_PARCELA": 400,
             "ID_PARCELA_INICIO": 2,
             "VERSION_PARCELA": "",
             "MIN_PARCELAS_HABILITADO": false,
@@ -41,19 +44,19 @@
                 "tipomateri"
             ]
         ],
-        "total_parcels": 65,
+        "total_parcels": 170,
         "grouping_fields": [
             "MATERIAL_G",
             "ESPECIE",
             "RODAL"
         ],
         "minimum_type": "custom",
-        "minimum_value": 4.0,
+        "minimum_value": 2.0,
         "use_original_area": false,
         "show_preview": true
     },
     "po_config": {
-        "ruta": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/01_po/af_uruguay_patch_20250623_prioritarios.gpkg",
+        "ruta": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/01_po/af_uruguay_patch_20250623_noprioritarios.gpkg",
         "capa": "uso_suelo",
         "campos": [
             "ID_FONDO",
@@ -128,25 +131,19 @@
     "delivery_config": {
         "delivery_code": "d01",
         "parcel_id_suffix": "control",
-        "date_today": "20250627",
-        "date_formatted": "2025-06-27",
+        "date_today": "20250701",
+        "date_formatted": "2025-07-01",
         "base_prefix": "afuy25",
         "custom_suffix": "",
         "subdirectories": {
             "results": "results",
             "logs": "logs",
             "summary": "summary"
-        },
-        "metadata": {
-            "description": "",
-            "version": "",
-            "operator": "",
-            "timestamp": "2025-06-30T08:11:41.214867"
         }
     },
     "column_order_config": {
-        "file_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627_v2\\results\\20250627_D04_PARCELAS_FINALES.gpkg",
-        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e04_20250627_v2/results/20250627_D04_PARCELAS_FINALES_ordenadas.gpkg",
+        "file_path": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/02_parcel/control_plots/plots_afuy_control_v02_prioritarios_20250627/results/20250627_afuy25_D01_07_parcelas_con_po.gpkg",
+        "output_path": "20250627_afuy25_D01_07_parcelas_con_po_ordenada.gpkg",
         "create_backup": false,
         "geometry_first": false,
         "column_order": [
@@ -154,17 +151,18 @@
             "gridcode",
             "group_id",
             "id_parcela",
-            "area_m2",
-            "punto_x",
-            "punto_y",
             "index",
+            "id_fondo",
+            "dcr_fondo",
             "predio",
+            "patch",
+            "uso_suelo",
+            "fecha_plan",
+            "ano_planta",
+            "id_predio",
             "rodal",
-            "anoplantac",
-            "talhao",
-            "mesplantac",
-            "tipouso",
-            "tipomateri",
+            "especie",
+            "material_g",
             "id_parcel"
         ]
     },

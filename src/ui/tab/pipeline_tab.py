@@ -159,6 +159,19 @@ class PipelineTab(QWidget):
         self.min_distance_value_spin = create_double_spinbox(0.0, 1000.0, 60.0, 0.1)
         area_distance_layout.addRow("Min distance between parcels (m):", self.min_distance_value_spin)
         
+        # Quality Filters
+        self.min_pixel_area_spin = create_spinbox(100, 1000, 399)
+        self.min_pixel_area_spin.setToolTip("Minimum pixel area in m² to filter out noise pixels")
+        area_distance_layout.addRow("Min pixel area (m²):", self.min_pixel_area_spin)
+        
+        self.min_p95_height_spin = create_double_spinbox(0.0, 10.0, 2.0, 0.1)
+        self.min_p95_height_spin.setToolTip("Minimum p95 height to filter low vegetation pixels")
+        area_distance_layout.addRow("Min p95 height:", self.min_p95_height_spin)
+        
+        self.parcel_area_spin = create_spinbox(100, 1000, 400)
+        self.parcel_area_spin.setToolTip("Target area for each generated parcel in m²")
+        area_distance_layout.addRow("Parcel area (m²):", self.parcel_area_spin)
+        
         config_summary_layout.addWidget(self.area_distance_group)
         
         # Parcel Identification Parameters
@@ -233,6 +246,9 @@ class PipelineTab(QWidget):
         self.min_parcels_value_spin.valueChanged.connect(self._on_parameter_changed)
         self.max_parcels_enabled_checkbox.toggled.connect(self._on_parameter_changed)
         self.max_parcels_value_spin.valueChanged.connect(self._on_parameter_changed)
+        self.min_pixel_area_spin.valueChanged.connect(self._on_parameter_changed)
+        self.min_p95_height_spin.valueChanged.connect(self._on_parameter_changed)
+        self.parcel_area_spin.valueChanged.connect(self._on_parameter_changed)
 
     def _select_grouping_fields(self):
         """Abre diálogo para seleccionar campos de agrupación."""
@@ -340,6 +356,9 @@ class PipelineTab(QWidget):
             <div style="color: #ffffff;">&nbsp;&nbsp;• Min Area: <span style="color: #90ee90; font-weight: bold;">{min_area} ha</span></div>
             <div style="color: #ffffff;">&nbsp;&nbsp;• Buffer Distance: <span style="color: #90ee90; font-weight: bold;">{buffer} m</span></div>
             <div style="color: #ffffff;">&nbsp;&nbsp;• Min Distance between parcels: <span style="color: #90ee90; font-weight: bold;">{min_distance} m</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Min pixel area: <span style="color: #90ee90; font-weight: bold;">{min_pixel_area} m²</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Min p95 height: <span style="color: #90ee90; font-weight: bold;">{min_p95_height}</span></div>
+            <div style="color: #ffffff;">&nbsp;&nbsp;• Parcel area: <span style="color: #90ee90; font-weight: bold;">{parcel_area} m²</span></div>
             <br>
             
             <div style="color: #ffb366; font-weight: bold;">📊 PARCEL COUNT LIMITS:</div>
@@ -368,6 +387,9 @@ class PipelineTab(QWidget):
                 min_area=cfg_overrides.get('AREA_MINIMA_HA', 'Not set'),
                 buffer=cfg_overrides.get('BUFFER_DISTANCE', 'Not set'),
                 min_distance=cfg_overrides.get('MIN_DISTANCE', 'Not set'),
+                min_pixel_area=cfg_overrides.get('MIN_PIXEL_AREA_M2', 'Not set'),
+                min_p95_height=cfg_overrides.get('MIN_P95_HEIGHT', 'Not set'),
+                parcel_area=cfg_overrides.get('AREA_PARCELA', 'Not set'),
                 min_parcels_status=f'<span class="enabled">{cfg_overrides.get("MIN_PARCELAS", "Not set")} (ENABLED)</span>' if cfg_overrides.get('MIN_PARCELAS_HABILITADO', False) else '<span class="disabled">DISABLED</span>',
                 max_parcels_status=f'<span class="enabled">{cfg_overrides.get("MAX_PARCELAS", "Not set")} (ENABLED)</span>' if cfg_overrides.get('MAX_PARCELAS_HABILITADO', False) else '<span class="disabled">DISABLED</span>',
                 start_id=cfg_overrides.get('ID_PARCELA_INICIO', 'Not set'),
@@ -387,6 +409,9 @@ class PipelineTab(QWidget):
         self.min_area_value_spin.blockSignals(True)
         self.buffer_value_spin.blockSignals(True)
         self.min_distance_value_spin.blockSignals(True)
+        self.min_pixel_area_spin.blockSignals(True)
+        self.min_p95_height_spin.blockSignals(True)
+        self.parcel_area_spin.blockSignals(True)
         
         try:
             # Aplicar valores del estilo
@@ -394,6 +419,9 @@ class PipelineTab(QWidget):
             self.min_area_value_spin.setValue(config.get("AREA_MINIMA_HA", 0.3))
             self.buffer_value_spin.setValue(config.get("BUFFER_DISTANCE", -20))
             self.min_distance_value_spin.setValue(config.get("MIN_DISTANCE", 60.0))
+            self.min_pixel_area_spin.setValue(config.get("MIN_PIXEL_AREA_M2", 399))
+            self.min_p95_height_spin.setValue(config.get("MIN_P95_HEIGHT", 2.0))
+            self.parcel_area_spin.setValue(config.get("AREA_PARCELA", 400))
             
             # Actualizar campos de agrupación si no hay selección manual
             if not self._grouping_fields:
@@ -418,6 +446,9 @@ class PipelineTab(QWidget):
             self.min_area_value_spin.blockSignals(False)
             self.buffer_value_spin.blockSignals(False)
             self.min_distance_value_spin.blockSignals(False)
+            self.min_pixel_area_spin.blockSignals(False)
+            self.min_p95_height_spin.blockSignals(False)
+            self.parcel_area_spin.blockSignals(False)
 
     def _reset_to_style_defaults(self) -> None:
         """Resetea todos los parámetros a los valores por defecto del estilo."""
@@ -445,6 +476,9 @@ class PipelineTab(QWidget):
                 "AREA_MINIMA_HA": self.min_area_value_spin.value(),
                 "BUFFER_DISTANCE": self.buffer_value_spin.value(),
                 "MIN_DISTANCE": self.min_distance_value_spin.value(),
+                "MIN_PIXEL_AREA_M2": self.min_pixel_area_spin.value(),
+                "MIN_P95_HEIGHT": self.min_p95_height_spin.value(),
+                "AREA_PARCELA": self.parcel_area_spin.value(),
                 "ID_PARCELA_INICIO": self.id_parcela_inicio_value_spin.value(),
                 "VERSION_PARCELA": self.version_parcela_value_line.text().strip(),
                 "MIN_PARCELAS_HABILITADO": self.min_parcels_enabled_checkbox.isChecked(),
@@ -481,6 +515,9 @@ class PipelineTab(QWidget):
                 self.min_area_value_spin.setValue(cfg_overrides.get("AREA_MINIMA_HA", 0.3))
                 self.buffer_value_spin.setValue(cfg_overrides.get("BUFFER_DISTANCE", -20))
                 self.min_distance_value_spin.setValue(cfg_overrides.get("MIN_DISTANCE", 60.0))
+                self.min_pixel_area_spin.setValue(cfg_overrides.get("MIN_PIXEL_AREA_M2", 399))
+                self.min_p95_height_spin.setValue(cfg_overrides.get("MIN_P95_HEIGHT", 2.0))
+                self.parcel_area_spin.setValue(cfg_overrides.get("AREA_PARCELA", 400))
                 self.id_parcela_inicio_value_spin.setValue(cfg_overrides.get("ID_PARCELA_INICIO", 0))
                 self.version_parcela_value_line.setText(cfg_overrides.get("VERSION_PARCELA", ""))
                 self.min_parcels_enabled_checkbox.setChecked(cfg_overrides.get("MIN_PARCELAS_HABILITADO", False))

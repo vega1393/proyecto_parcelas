@@ -89,11 +89,5 @@
         }
     },
     "delivery_code": "d01",
-    "date_today": "20250617",
-    "delivery_metadata": {
-        "description": "teste_description",
-        "version": "v01",
-        "operator": "vegatest",
-        "timestamp": "2025-06-17T10:16:47.587532"
-    }
+    "date_today": "20250617"
 }

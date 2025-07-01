@@ -34,7 +34,9 @@ BASE_CONFIG = {
             "predio": "id_predio"
         }
     },
-    "AREA_PARCELA": 400,
+            "AREA_PARCELA": 400,
+        "MIN_PIXEL_AREA_M2": 399,
+        "MIN_P95_HEIGHT": 2.0,
     "ID_PARCELA_INICIO": 0,
     "VERSION_PARCELA": "",
     "FIELDS": ["zc_pira", "tipo_uso", "tipouso"],
