@@ -98,15 +98,19 @@ def calcular_cantidad_de_parcelas(
         logger.warning("No hay registros después de los filtros de calidad de píxeles. El resultado estará vacío.")
         return gpd.GeoDataFrame(), gpd.GeoDataFrame()
 
-    # --- PASO 3: Agrupación (Dissolve) y filtro por área de grupo ---
-    logger.info("Realizando dissolve sobre datos filtrados para crear grupos...")
+    # --- PASO 3A: Agrupación inicial (Dissolve) SIN filtros de píxeles ---
+    logger.info("Realizando dissolve inicial sobre TODOS los píxeles para crear grupos completos...")
+    dissolved_gdf_initial = gdf_processed.dissolve(by=group_cols, as_index=False)
+    dissolved_gdf_initial['area_m2_inicial'] = dissolved_gdf_initial.geometry.area
+    dissolved_gdf_initial['area_ha_inicial'] = dissolved_gdf_initial['area_m2_inicial'] / 10_000
+    logger.info(f"Dissolve inicial completado. Se crearon {len(dissolved_gdf_initial)} grupos COMPLETOS (sin filtros).")
+
+    # --- PASO 3B: Agrupación sobre datos filtrados para procesamiento ---
+    logger.info("Realizando dissolve sobre datos filtrados para procesamiento...")
     dissolved_gdf = gdf_filtered_pixels.dissolve(by=group_cols, as_index=False)
     dissolved_gdf['area_m2_pre_buffer'] = dissolved_gdf.geometry.area
     dissolved_gdf['area_ha_pre_buffer'] = dissolved_gdf['area_m2_pre_buffer'] / 10_000
-    logger.info(f"Dissolve completado. Se crearon {len(dissolved_gdf)} grupos.")
-
-    # [NUEVO] Guardar una copia antes de los filtros de área y buffer para análisis
-    dissolved_gdf_initial = dissolved_gdf.copy()
+    logger.info(f"Dissolve filtrado completado. Se crearon {len(dissolved_gdf)} grupos (post-filtros píxeles).")
 
     logger.info(f"Grupos antes de filtrar por área mínima ({area_minima_ha} ha): {len(dissolved_gdf)}")
     dissolved_gdf = dissolved_gdf[dissolved_gdf['area_ha_pre_buffer'] >= area_minima_ha].copy()
@@ -132,10 +136,10 @@ def calcular_cantidad_de_parcelas(
     dissolved_gdf['area_m2'] = dissolved_gdf.geometry.area
     dissolved_gdf['area_ha'] = dissolved_gdf['area_m2'] / 10_000
     
-    # Guardar GPKG de diagnóstico (opcional) con las áreas FINALES de generación
+    # Guardar GPKG de diagnóstico (opcional) con las áreas INICIALES COMPLETAS
     if output_gpkg_dissolved_initial:
-        logger.info(f"Generando GPKG de diagnóstico con áreas de generación finales en: {output_gpkg_dissolved_initial}")
-        pyogrio.write_dataframe(dissolved_gdf.reset_index(drop=True), output_gpkg_dissolved_initial, driver='GPKG', layer='areas_generacion_finales')
+        logger.info(f"Guardando áreas agrupadas INICIALES COMPLETAS (todos los píxeles, sin filtros) en: {output_gpkg_dissolved_initial}")
+        pyogrio.write_dataframe(dissolved_gdf_initial.reset_index(drop=True), output_gpkg_dissolved_initial, driver='GPKG', layer='areas_agrupadas_completas')
 
     # --- PASO 5: Distribución de parcelas sobre las áreas finales ---
     if use_total_based and total_parcels is not None:
@@ -184,8 +188,8 @@ def calcular_cantidad_de_parcelas(
         dissolved_gdf[export_cols].to_csv(output_csv, index=False)
 
     if output_gpkg:
-        logger.info(f"Guardando capa final (sin buffer adicional) en: {output_gpkg}")
-        # El buffer ya fue aplicado, solo guardamos el resultado
-        pyogrio.write_dataframe(dissolved_gdf.reset_index(drop=True), output_gpkg, driver='GPKG', layer=f'dissolved_final_neg{abs(buffer_distance)}')
+        logger.info(f"Guardando áreas FILTRADAS (post-área mínima y buffer) en: {output_gpkg}")
+        # Estas son las áreas finales que sobrevivieron todos los filtros
+        pyogrio.write_dataframe(dissolved_gdf.reset_index(drop=True), output_gpkg, driver='GPKG', layer=f'areas_filtradas_buffer_neg{abs(buffer_distance)}')
     
     return dissolved_gdf, dissolved_gdf_initial

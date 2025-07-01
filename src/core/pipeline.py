@@ -1,5 +1,67 @@
 # src/core/pipeline.py
 
+"""
+Pipeline principal para generación de parcelas geoespaciales.
+
+ARQUITECTURA DEL PIPELINE:
+==========================
+
+FLUJO PRINCIPAL (7 etapas configurables):
+1. [ETAPA 1] Carga y Filtrado Inicial (líneas ~104-129)
+2. [ETAPA 2] Cálculo GridCode + Guardado Robusto (líneas ~133-337) 
+3. [ETAPA 3] Cálculo de Parcelas (3 modos) (líneas ~338-427)
+4. [ETAPA 4] Exclusiones Geográficas (líneas ~430-441)
+5. [ETAPA 5] Aplicación CSV Post-Exclusión (líneas ~445-584)
+6. [ETAPA 6] Generación Parcelas + Polígonos (líneas ~585-605)
+7. [ETAPA 7] Asignación PO + Análisis (líneas ~607-637)
+
+MODOS DE OPERACIÓN:
+==================
+- NORMAL: Intensidad fija por tipo de uso
+- CSV: Conteos desde archivo externo (post-exclusiones)
+- TOTAL-BASED: Distribución proporcional de total fijo
+
+VARIABLES DE ESTADO CRÍTICAS:
+============================
+- gdf: Datos iniciales filtrados
+- gdf_para_generar: Post-cálculo de parcelas  
+- gdf_post_exclusion: Post-exclusiones geográficas
+- puntos_gdf: Parcelas generadas (puntos)
+- poligonos_gdf: Parcelas como polígonos
+- parcelas_con_po: Parcelas con atributos PO
+
+PUNTOS DE MANTENIMIENTO FRECUENTE:
+=================================
+- Configuración de filtros (cfg["FILTROS_CAMPOS"])
+- Parámetros de intensidad (cfg["INTENSIDAD_POR_CAMPO"]) 
+- Rutas de capas de exclusión (cfg["CAPAS_EXCLUSION"])
+- Configuración PO (cfg["PO_CONFIG"])
+
+GUARDADO ROBUSTO (líneas ~244-337):
+==================================
+Sistema de 4 fallbacks para problemas de I/O:
+1. pyogrio directo
+2. geopandas fallback  
+3. guardado por lotes
+4. eliminación de registros problemáticos
+
+MERGE CSV COMPLEJO (líneas ~445-584):
+====================================
+Lógica crítica para aplicación de conteos CSV:
+- Harmonización de tipos de datos
+- Análisis pre/post merge
+- Identificación de grupos faltantes
+- Limpieza de columnas extra
+
+TODO - MEJORAS FUTURAS (cuando haya más tiempo):
+===============================================
+- [ ] Extraer función _robust_save_geodataframe()
+- [ ] Extraer función _apply_csv_counts()  
+- [ ] Extraer función _setup_grouping_columns()
+- [ ] Añadir validación de inputs más robusta
+- [ ] Crear tests de integración específicos
+"""
+
 import logging
 import os
 import geopandas as gpd
@@ -53,12 +115,50 @@ def ejecutar_proceso(
 ) -> Dict[str, Any]:
     """
     Ejecuta todo el pipeline de generación de parcelas.
+    
+    PIPELINE FLOW:
+    ==============
+    1. Setup inicial y configuración
+    2. Carga de datos y filtrado inicial  
+    3. Cálculo de gridcode (con guardado robusto)
+    4. Cálculo de cantidad de parcelas (3 modos)
+    5. Aplicación de exclusiones geográficas
+    6. Aplicación de conteos CSV (si aplica)
+    7. Generación de parcelas (puntos)
+    8. Generación de polígonos
+    9. Asignación de atributos PO
+    10. Análisis de pérdidas
+    
+    Args:
+        input_path: Ruta al archivo de entrada (grilla de píxeles)
+        output_dir: Directorio de salida 
+        estilo: Estilo de configuración (calibration/control/custom)
+        cfg_overrides: Sobrescribir parámetros de configuración
+        progress_callback: Función para reportar progreso
+        use_csv: Si usar conteos desde CSV
+        csv_path: Ruta al archivo CSV de conteos
+        grouping_fields: Campos de agrupación personalizados
+        delivery_config: Configuración de entrega
+        gridcode_column_csv: Mapeo de columna gridcode en CSV
+        use_total: Si usar modo total-based
+        total_config: Configuración para modo total-based
+        
+    Returns:
+        Dict con resultados del pipeline y rutas de archivos generados
+        
+    Raises:
+        FileNotFoundError: Si el archivo de entrada no existe
+        ValueError: Si la configuración es inválida
+        RuntimeError: Si falla alguna etapa crítica del pipeline
     """
     def report_progress(value, status):
         if progress_callback:
             progress_callback(value, status)
         logger.info(f"Progreso: {value}% - {status}")
 
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # ETAPA 0: SETUP INICIAL Y CONFIGURACIÓN
+    # ═══════════════════════════════════════════════════════════════════════════════
     report_progress(0, "Inicializando...")
     cfg = get_config(estilo, cfg_overrides)
 
@@ -68,7 +168,7 @@ def ejecutar_proceso(
     if delivery_config is None:
         delivery_config = {}
 
-    # === CONFIGURACIÓN DE RUTAS DE SALIDA ===
+    # Configuración de rutas de salida
     rutas = configurar_rutas(input_path, output_dir, delivery_config)
     
     setup_logging(rutas['log_file'])
@@ -102,11 +202,14 @@ def ejecutar_proceso(
                 logger.info(f"Campo '{campo}': {filtro}")
         logger.info("=" * 30)
 
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # ETAPA 1: CARGA DE DATOS Y FILTRADO INICIAL
+        # ═══════════════════════════════════════════════════════════════════════════════
         report_progress(10, "Cargando datos de entrada...")
         gdf = pyogrio.read_dataframe(rutas['input'])
         gdf = gpd.GeoDataFrame(gdf, geometry='geometry')
         gdf = verificar_y_transformar_crs(gdf, "entrada", cfg['PROJECTED_CRS'])
-        gdf.columns = gdf.columns.str.lower()
+        gdf.columns = gdf.columns.str.lower()  # NORMALIZACIÓN CRÍTICA: todo a minúsculas
     
         report_progress(15, "Aplicando filtros iniciales...")
         try:
@@ -131,13 +234,15 @@ def ejecutar_proceso(
         op = cfg["OPCIONES_ACTIVAS"]
         
         if 1 in op:
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # ETAPA 2: CÁLCULO DE GRIDCODE + GUARDADO ROBUSTO
+            # ═══════════════════════════════════════════════════════════════════════════════
             report_progress(20, "Calculando gridcode...")
-            # Asegurarse que el nombre de la columna de gridcode también esté en minúsculas si se crea
             gridcode_params = cfg.get("GRIDCODE_PARAMS")
             gdf = calcular_gridcode(
                 gdf, 
                 cfg["USE_GRIDCODE"], 
-                {k: v.lower() for k, v in cfg["CAMPOS_METRICAS"].items()},
+                {k: v.lower() for k, v in cfg["CAMPOS_METRICAS"].items()},  # NORMALIZACIÓN
                 gridcode_params
             )
             
@@ -334,9 +439,11 @@ def ejecutar_proceso(
                     logger.info("ℹ️  Continuando pipeline sin guardar grilla intermedia...")
                     # No hacer raise, continuar con el pipeline
 
-        # --- Determinar las columnas de agrupación ---
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # CONFIGURACIÓN DE CAMPOS DE AGRUPACIÓN
+        # ═══════════════════════════════════════════════════════════════════════════════
         grouping_cols = []
-        # [CORRECCIÓN CLAVE] Forzar a minúsculas aquí para asegurar consistencia
+        # NORMALIZACIÓN CRÍTICA: Forzar a minúsculas para consistencia
         if grouping_fields:
             grouping_cols = [col.lower() for col in grouping_fields]
             logger.info(f"Usando campos de agrupación personalizados desde la GUI: {grouping_cols}")
@@ -345,11 +452,15 @@ def ejecutar_proceso(
             logger.info(f"Usando campos de agrupación por defecto del estilo '{estilo}': {default_fields}")
             grouping_cols = default_fields
 
+        # Añadir gridcode si está habilitado y disponible
         if cfg["USE_GRIDCODE"] and 'gridcode' in gdf.columns:
             if 'gridcode' not in grouping_cols:
                 grouping_cols.append('gridcode')
 
         if use_csv:
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # ETAPA 3A: CÁLCULO DE PARCELAS - MODO CSV (PREPARACIÓN)
+            # ═══════════════════════════════════════════════════════════════════════════════
             report_progress(22, "Generando áreas agrupadas (modo CSV)...")
             logger.info(f"Usando modo CSV. Generando áreas intermedias antes de aplicar CSV...")
             
@@ -380,6 +491,9 @@ def ejecutar_proceso(
         else:
             if 2 in op:
                 if use_total:
+                    # ═══════════════════════════════════════════════════════════════════════════════
+                    # ETAPA 3B: CÁLCULO DE PARCELAS - MODO TOTAL-BASED
+                    # ═══════════════════════════════════════════════════════════════════════════════
                     report_progress(25, "Calculando distribución proporcional de parcelas...")
                     # Configurar parámetros total-based
                     total_parcels = total_config.get("total_parcels", 800) if total_config else 800
@@ -405,6 +519,9 @@ def ejecutar_proceso(
                         campos_metricas=cfg.get("CAMPOS_METRICAS")
                     )
                 else:
+                    # ═══════════════════════════════════════════════════════════════════════════════
+                    # ETAPA 3C: CÁLCULO DE PARCELAS - MODO NORMAL (INTENSIDAD)
+                    # ═══════════════════════════════════════════════════════════════════════════════
                     report_progress(25, "Calculando cantidad de parcelas por intensidad...")
                     gdf_para_generar = calcular_cantidad_de_parcelas(
                         gdf=gdf, fields=grouping_cols, intensidad=cfg["INTENSIDAD"],
@@ -426,6 +543,9 @@ def ejecutar_proceso(
                 gdf_para_generar = gdf.copy()
                 gdf_para_generar['n_parcelas'] = 0
 
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # ETAPA 4: EXCLUSIONES GEOGRÁFICAS
+        # ═══════════════════════════════════════════════════════════════════════════════
         gdf_post_exclusion = gdf_para_generar
         if 3 in op and cfg["CAPAS_EXCLUSION"]:
             report_progress(40, "Aplicando exclusiones geográficas...")
@@ -441,7 +561,10 @@ def ejecutar_proceso(
             logger.debug("Paso de exclusiones deshabilitado en la configuración.")
             gdf_post_exclusion = gdf_para_generar
         
-        # [NUEVO] APLICAR CSV DESPUÉS DE EXCLUSIONES
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # ETAPA 5: APLICACIÓN DE CONTEOS CSV (POST-EXCLUSIÓN)
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # NOTA: Esta etapa incluye lógica compleja de merge con análisis detallado
         if use_csv:
             report_progress(45, "Aplicando conteos desde CSV post-exclusión...")
             logger.info(f"Aplicando conteos desde CSV: {csv_path}")
@@ -581,6 +704,9 @@ def ejecutar_proceso(
             logger.info(f"CSV aplicado exitosamente. {len(gdf_post_exclusion)} grupos con n_parcelas desde CSV.")
             resultados['gdf_post_exclusion'] = gdf_post_exclusion
         
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # ETAPA 6: GENERACIÓN DE PARCELAS (PUNTOS)
+        # ═══════════════════════════════════════════════════════════════════════════════
         puntos_gdf = None
         if 4 in op:
             report_progress(55, "Generando parcelas (puntos)...")
@@ -590,6 +716,9 @@ def ejecutar_proceso(
             )
             resultados['puntos_gdf'] = puntos_gdf
             
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # ETAPA 7: GENERACIÓN DE POLÍGONOS
+        # ═══════════════════════════════════════════════════════════════════════════════
         poligonos_gdf = None
         if 5 in op and puntos_gdf is not None and not puntos_gdf.empty:
             report_progress(70, "Generando polígonos...")
@@ -603,27 +732,34 @@ def ejecutar_proceso(
         else:
             resultados['poligonos_gdf'] = poligonos_gdf # Mantener como None si no se generaron
             
-        parcelas_con_po = None  # INICIALIZACIÓN CLAVE
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # ETAPA 8: ASIGNACIÓN DE ATRIBUTOS DEL PLAN OPERATIVO
+        # ═══════════════════════════════════════════════════════════════════════════════
+        parcelas_con_po = None  # INICIALIZACIÓN CLAVE para análisis posterior
         if 6 in op and poligonos_gdf is not None and not poligonos_gdf.empty:
             report_progress(85, "Asignando atributos PO...")
-            if puntos_gdf is not None and not puntos_gdf.empty:
-                # Recuperar configuración de entrega para el nombre de archivo
-                delivery_code = delivery_config.get('code', 'D01') if delivery_config else 'D01'
-                parcel_suffix = delivery_config.get('suffix', 'control') if delivery_config else 'control'
-                
-                parcelas_con_po = asignar_atributos_po(
-                    parcelas_gdf=puntos_gdf,
-                    po_config=cfg['PO_CONFIG'],
-                    crs_target=cfg['PROJECTED_CRS'],
-                    output_path=rutas['gpkg_po'],
-                    entrega=delivery_code
-                )
-            else:
-                logger.warning("No se generaron puntos de parcelas, saltando asignación de atributos PO.")
+            # Recuperar configuración de entrega para el nombre de archivo
+            delivery_code = delivery_config.get('code', 'D01') if delivery_config else 'D01'
+            parcel_suffix = delivery_config.get('suffix', 'control') if delivery_config else 'control'
             
+            # CORREGIDO: Usar polígonos en lugar de puntos para atributos PO
+            parcelas_con_po = asignar_atributos_po(
+                parcelas_gdf=poligonos_gdf,  # ✅ Usar polígonos para mejor intersección espacial
+                po_config=cfg['PO_CONFIG'],
+                crs_target=cfg['PROJECTED_CRS'],
+                output_path=rutas['gpkg_po'],
+                entrega=delivery_code
+            )
+        else:
+            if 6 in op:
+                logger.warning("No se generaron polígonos de parcelas, saltando asignación de atributos PO.")
+            
+            # ═══════════════════════════════════════════════════════════════════════════════
+            # ETAPA 9: ANÁLISIS DE PÉRDIDAS
+            # ═══════════════════════════════════════════════════════════════════════════════
             if 7 in op:
                 report_progress(95, "Analizando pérdidas...")
-                # Usa 'gdf_para_generar' que contiene la columna 'n_parcelas'
+                # IMPORTANTE: Usa 'gdf_para_generar' que contiene la columna 'n_parcelas'
                 if gdf_para_generar is not None and not gdf_para_generar.empty and parcelas_con_po is not None and not parcelas_con_po.empty:
                     analizar_perdidas_parcelas(
                         gdf_calculado=gdf_para_generar,

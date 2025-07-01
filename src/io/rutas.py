@@ -98,7 +98,7 @@ def configurar_rutas(
         'gpkg_exclusion': os.path.join(full_results_dir, f"{date_str}_{base_name}_04_areas_post_exclusion.gpkg"),
         'gpkg_parcelas': os.path.join(full_results_dir, f"{date_str}_{base_name}_05_parcelas_generadas.gpkg"),
         'gpkg_poligonos': os.path.join(full_results_dir, f"{date_str}_{base_name}_06_poligonos_parcelas.gpkg"),
-        'gpkg_po': os.path.join(full_results_dir, f"{date_str}_{base_name}_07_parcelas_con_po.gpkg"),
+        'gpkg_po': os.path.join(full_results_dir, f"{date_str}_{base_name}_07_poligonos_con_po.gpkg"),
         
         # Results - Archivo final
         'gpkg_final': os.path.join(full_results_dir, f"{date_str}_{base_name}_PARCELAS_FINALES.gpkg")
