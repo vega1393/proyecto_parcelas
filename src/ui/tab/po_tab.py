@@ -9,7 +9,7 @@ from PyQt6.QtCore import pyqtSignal
 from typing import Dict, List, Any
 
 from src.utils.gpkg_helpers import list_layers, list_fields
-from src.utils.dialog_utils import EnhancedFileDialog, create_geo_file_filter
+from src.utils.dialog_utils import EnhancedFileDialog, create_geo_file_filter, get_initial_directory_from_path
 from src.ui.dialogs.po_fields_dialog import POFieldsDialog
 
 class POTab(QWidget):
@@ -70,8 +70,9 @@ class POTab(QWidget):
         self.id_tipo_uso_line.textChanged.connect(lambda: self.configChanged.emit(self.get_config()))
 
     def _select_po_file(self):
+        initial_dir = get_initial_directory_from_path(self.po_path_line.text())
         path, _ = EnhancedFileDialog.get_open_file_name(
-            self, "Select PO File", "", create_geo_file_filter()
+            self, "Select PO File", initial_dir, create_geo_file_filter()
         )
         if path:
             self.po_path_line.setText(path)

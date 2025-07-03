@@ -466,7 +466,7 @@ def ejecutar_proceso(
             
             # PASO 1: Generar áreas agrupadas (SIN intensidad porque el CSV define las parcelas)
             logger.info("Modo CSV: Deshabilitando intensidad - las parcelas se definen por CSV")
-            gdf_areas_agrupadas = calcular_cantidad_de_parcelas(
+            gdf_areas_agrupadas, _ = calcular_cantidad_de_parcelas(
                 gdf=gdf, fields=grouping_cols, intensidad=0,  # Intensidad = 0 cuando hay CSV
                 use_intensidad_especifica=False,  # No usar intensidad específica
                 intensidad_por_campo={},  # Vacío

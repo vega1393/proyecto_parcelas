@@ -54,8 +54,14 @@ class ExclusionTab(QWidget):
 
     def _add_exclusion(self) -> None:
         """Guides the user through adding a new exclusion layer."""
+        initial_dir = os.path.expanduser("~") 
+        if self._exclusion_list:
+            last_item_path = self._exclusion_list[-1].get("path")
+            if last_item_path and os.path.exists(last_item_path):
+                initial_dir = os.path.dirname(last_item_path)
+
         file_path, _ = EnhancedFileDialog.get_open_file_name(
-            self, "Select Exclusion File", "", create_geo_file_filter()
+            self, "Select Exclusion File", initial_dir, create_geo_file_filter()
         )
         if not file_path:
             return

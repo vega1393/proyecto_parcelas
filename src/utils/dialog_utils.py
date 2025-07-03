@@ -180,4 +180,20 @@ def create_csv_file_filter() -> str:
     Returns:
         Filter string for CSV files
     """
-    return "CSV Files (*.csv);;All Files (*)" 
+    return "CSV Files (*.csv);;All Files (*)"
+
+
+def get_initial_directory_from_path(path: str) -> str:
+    """
+    Determines the initial directory for a file dialog based on a given path.
+
+    - If the path is a valid file or directory, its containing folder is returned.
+    - Otherwise, the user's home directory is used as a default.
+    """
+    current_path = path.strip()
+    if current_path and os.path.exists(current_path):
+        if os.path.isdir(current_path):
+            return current_path
+        else:
+            return os.path.dirname(current_path)
+    return os.path.expanduser("~") 

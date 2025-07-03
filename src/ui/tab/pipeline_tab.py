@@ -14,11 +14,12 @@ from typing import Dict, Any, List, Optional
 from src.ui.dialogs.po_fields_dialog import POFieldsDialog
 from src.ui.widgets_utils import create_spinbox, create_double_spinbox, create_style_combo
 from src.utils.gpkg_helpers import list_layers, list_fields
-from src.utils.dialog_utils import EnhancedFileDialog, create_geo_file_filter
+from src.utils.dialog_utils import EnhancedFileDialog, create_geo_file_filter, get_initial_directory_from_path
 
 class PipelineTab(QWidget):
     runRequested = pyqtSignal()
     configChanged = pyqtSignal(dict)
+    input_file_changed = pyqtSignal(list)
 
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -250,6 +251,27 @@ class PipelineTab(QWidget):
         self.min_p95_height_spin.valueChanged.connect(self._on_parameter_changed)
         self.parcel_area_spin.valueChanged.connect(self._on_parameter_changed)
 
+        # Emitir la lista de campos cuando el archivo de entrada cambia
+        self.input_line.textChanged.connect(self._emit_gdf_fields)
+
+    def _emit_gdf_fields(self, file_path: str) -> None:
+        """Emits the list of fields from the GDF when the input file changes."""
+        if not file_path or not os.path.exists(file_path):
+            self.input_file_changed.emit([])
+            return
+        
+        try:
+            # Asumimos que la primera capa es la relevante
+            layers = list_layers(file_path)
+            if layers:
+                fields = list_fields(file_path, layers[0])
+                self.input_file_changed.emit(fields)
+            else:
+                self.input_file_changed.emit([])
+        except Exception as e:
+            # En caso de error, emitir una lista vacía
+            self.input_file_changed.emit([])
+
     def _select_grouping_fields(self):
         """Abre diálogo para seleccionar campos de agrupación."""
         input_path = self.input_line.text().strip()
@@ -294,15 +316,19 @@ class PipelineTab(QWidget):
 
     def _browse_input_file(self):
         """Opens a file dialog to select the input file."""
+        initial_dir = get_initial_directory_from_path(self.input_line.text())
         file_path, _ = EnhancedFileDialog.get_open_file_name(
-            self, "Select Input File", "", create_geo_file_filter()
+            self, "Select Input File", initial_dir, create_geo_file_filter()
         )
         if file_path:
             self.input_line.setText(file_path)
 
     def _browse_output_dir(self):
         """Opens a directory dialog to select the output directory."""
-        dir_path = EnhancedFileDialog.get_existing_directory(self, "Select Output Directory")
+        initial_dir = get_initial_directory_from_path(self.output_line.text())
+        dir_path = EnhancedFileDialog.get_existing_directory(
+            self, "Select Output Directory", initial_dir
+        )
         if dir_path:
             self.output_line.setText(dir_path)
 

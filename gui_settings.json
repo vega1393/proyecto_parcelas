@@ -1,39 +1,38 @@
 {
     "pipeline_config": {
-        "input_path": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/03_metricas/grilla_metrica_noprioritarios_v2.gpkg",
-        "output_dir": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/02_parcel/control_plots/plots_afuy_control_v01_noprioritarios_20250627",
+        "input_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/02_metricas/02_entregas/GPKG_Brasil2025_E05_Metricas.gpkg",
+        "output_dir": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e05_20250703",
         "style": "custom",
         "grouping_fields": [
-            "ID_PREDIO",
-            "RODAL",
-            "ESPECIE",
-            "MATERIAL_G"
+            "tipouso",
+            "tipomateri",
+            "gridcode"
         ],
         "cfg_overrides": {
-            "PROJECTED_CRS": 32721,
-            "AREA_MINIMA_HA": 0.0,
-            "BUFFER_DISTANCE": -13,
-            "MIN_DISTANCE": 120.0,
+            "PROJECTED_CRS": 31982,
+            "AREA_MINIMA_HA": 0.3,
+            "BUFFER_DISTANCE": -20,
+            "MIN_DISTANCE": 60.0,
             "MIN_PIXEL_AREA_M2": 399,
             "MIN_P95_HEIGHT": 2.0,
             "AREA_PARCELA": 400,
-            "ID_PARCELA_INICIO": 2,
+            "ID_PARCELA_INICIO": 1,
             "VERSION_PARCELA": "",
             "MIN_PARCELAS_HABILITADO": false,
             "MIN_PARCELAS": 1,
-            "MAX_PARCELAS_HABILITADO": false,
+            "MAX_PARCELAS_HABILITADO": true,
             "MAX_PARCELAS": 10
         }
     },
     "sampling_config": {
-        "use_csv": false,
-        "use_total": true,
-        "csv_path": null,
+        "use_csv": true,
+        "use_total": false,
+        "csv_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/01_csv_nparcelas_segovia/muestreo_brasil_E05_20250703.csv",
         "base_intensity": 55,
         "use_specific_intensity": false,
         "specific_intensities": {},
-        "count_column_csv": "",
-        "gridcode_column_csv": "",
+        "count_column_csv": "n",
+        "gridcode_column_csv": "gridcode2",
         "field_mappings": [
             [
                 "tipouso",
@@ -56,24 +55,20 @@
         "show_preview": true
     },
     "po_config": {
-        "ruta": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/01_po/af_uruguay_patch_20250623_noprioritarios.gpkg",
+        "ruta": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/01_po/01_po_from_arauco/po_brasil_2025_v04_usoabril.gpkg",
         "capa": "uso_suelo",
         "campos": [
-            "ID_FONDO",
-            "DCR_FONDO",
-            "ID_PREDIO",
-            "PREDIO",
-            "RODAL",
-            "PATCH",
-            "USO_SUELO",
-            "ESPECIE",
-            "MATERIAL_G",
-            "FECHA_PLAN",
-            "ANO_PLANTA"
+            "predio",
+            "rodal",
+            "anoplantac",
+            "talhao",
+            "mesplantac",
+            "tipouso",
+            "tipomateri"
         ],
         "campos_id_fasa": {
-            "predio": "ID_PREDIO",
-            "tipo": "MATERIAL_G"
+            "predio": "predio",
+            "tipo": "tipouso"
         }
     },
     "exclusion_config": [],
@@ -84,16 +79,16 @@
                 "field": "cov",
                 "bins": [
                     {
-                        "max": 33.0,
+                        "max": 50.0,
                         "id": 1
                     },
                     {
-                        "min": 33.0,
-                        "max": 79.0,
+                        "min": 50.0,
+                        "max": 75.0,
                         "id": 2
                     },
                     {
-                        "min": 79.0,
+                        "min": 75.0,
                         "id": 3
                     }
                 ]
@@ -102,26 +97,26 @@
                 "field": "p95",
                 "bins": [
                     {
-                        "max": 7.0,
+                        "max": 8.0,
                         "id": 1
                     },
                     {
-                        "min": 7.0,
-                        "max": 36.0,
+                        "min": 8.0,
+                        "max": 12.0,
                         "id": 2
                     },
                     {
-                        "min": 36.0,
-                        "max": 38.0,
+                        "min": 12.0,
+                        "max": 16.0,
                         "id": 3
                     },
                     {
-                        "min": 38.0,
-                        "max": 40.0,
+                        "min": 16.0,
+                        "max": 20.0,
                         "id": 4
                     },
                     {
-                        "min": 40.0,
+                        "min": 20.0,
                         "id": 5
                     }
                 ]
@@ -129,11 +124,11 @@
         }
     },
     "delivery_config": {
-        "delivery_code": "d01",
-        "parcel_id_suffix": "control",
-        "date_today": "20250701",
-        "date_formatted": "2025-07-01",
-        "base_prefix": "afuy25",
+        "delivery_code": "d05",
+        "parcel_id_suffix": "calibration",
+        "date_today": "20250703",
+        "date_formatted": "2025-07-03",
+        "base_prefix": "fasa_br25",
         "custom_suffix": "",
         "subdirectories": {
             "results": "results",
@@ -142,27 +137,26 @@
         }
     },
     "column_order_config": {
-        "file_path": "C:/TRABAJO/06_proyectos/13_AF_uruguay2025/02_parcel/control_plots/plots_afuy_control_v02_prioritarios_20250627/results/20250627_afuy25_D01_07_parcelas_con_po.gpkg",
-        "output_path": "20250627_afuy25_D01_07_parcelas_con_po_ordenada.gpkg",
-        "create_backup": false,
+        "file_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e05_20250703\\results\\20250703_fasa_br25_D05_07_poligonos_con_po.gpkg",
+        "output_path": "C:/TRABAJO/06_proyectos/12_arauco_brasil2025/03_gen_parcelas/02_resultados/01_calibration_parcels/04_parcel_calibration_e05_20250703/results/20250703_fasa_br25_D05_07_poligonos_con_po_ordenados.gpkg",
+        "create_backup": true,
         "geometry_first": false,
         "column_order": [
             "geom",
             "gridcode",
             "group_id",
             "id_parcela",
+            "area_m2",
+            "punto_x",
+            "punto_y",
             "index",
-            "id_fondo",
-            "dcr_fondo",
             "predio",
-            "patch",
-            "uso_suelo",
-            "fecha_plan",
-            "ano_planta",
-            "id_predio",
             "rodal",
-            "especie",
-            "material_g",
+            "anoplantac",
+            "talhao",
+            "mesplantac",
+            "tipouso",
+            "tipomateri",
             "id_parcel"
         ]
     },

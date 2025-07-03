@@ -35,6 +35,7 @@ class ParcelGeneratorApp(QMainWindow):
 
         self.process: Optional[QProcess] = None
         self._last_temp_config_path: Optional[str] = None
+        self._last_output_path: Optional[str] = None  # Almacenar la última ruta de salida
         self.pipeline_config: Dict[str, Any] = {}
         
         # Configuración de logging UI (por defecto INFO)
@@ -189,6 +190,9 @@ class ParcelGeneratorApp(QMainWindow):
         self.main_run_btn.clicked.connect(self._run_pipeline)
         self.main_stop_btn.clicked.connect(self._stop_pipeline)
         
+        # Conectar el cambio de archivo de entrada a la actualización de la pestaña de muestreo
+        self.pipeline_tab.input_file_changed.connect(self.sampling_tab.update_gdf_fields)
+        
         # Señales existentes (mantener compatibilidad)
         self.pipeline_tab.runRequested.connect(self._run_pipeline)
         self.clear_log_btn.clicked.connect(self.log_text.clear)
@@ -211,6 +215,22 @@ class ParcelGeneratorApp(QMainWindow):
         log_level_combo = self.config_tab.findChild(QComboBox, "log_level_combo")
         if log_level_combo:
             log_level_combo.currentTextChanged.connect(self._on_log_level_changed)
+
+        # Conectar solicitud de la pestaña de orden de columnas
+        self.column_order_tab.request_pipeline_output.connect(self._on_request_pipeline_output)
+
+    def _on_request_pipeline_output(self):
+        """Proporciona la ruta de salida del pipeline a la pestaña de orden de columnas."""
+        if self._last_output_path and os.path.exists(self._last_output_path):
+            self.column_order_tab.set_pipeline_output_path(self._last_output_path)
+            self._log_message(f"Provided final output path to Column Order tab: {self._last_output_path}", "INFO")
+        else:
+            QMessageBox.warning(
+                self, "Pipeline Output Not Found",
+                "The pipeline has not been run successfully yet, or the output file could not be found.\n\n"
+                "Please run the pipeline first to generate an output file."
+            )
+            self._log_message("Request for pipeline output path failed: path not available or invalid.", "WARNING")
 
     def _on_po_config_changed(self, po_config: Dict[str, Any]):
         self.pipeline_config['PO_CONFIG'] = po_config
@@ -292,6 +312,9 @@ class ParcelGeneratorApp(QMainWindow):
             if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
                 QMessageBox.warning(self, "Warning", "Pipeline is already running.")
                 return
+
+            # Reiniciar la ruta de salida para la nueva ejecución
+            self._last_output_path = None
 
             pipeline_config = self._get_full_pipeline_config()
             
@@ -523,6 +546,15 @@ class ParcelGeneratorApp(QMainWindow):
                     except Exception:
                         # Si hay error procesando JSON, procesar como línea normal
                         pass
+                        
+                    # CAPTURAR LA RUTA DE SALIDA FINAL DESDE EL LOG
+                    if "Parcels with PO attributes saved to:" in line:
+                        try:
+                            path = line.split("Parcels with PO attributes saved to:", 1)[1].strip()
+                            self._last_output_path = path
+                            self._log_message(f"Captured final output path: {path}", "DEBUG")
+                        except Exception as e:
+                            self._log_message(f"Failed to parse output path from log line: '{line}'. Error: {e}", "WARNING")
                         
                     # Procesar líneas de progreso legacy de forma segura
                     try:

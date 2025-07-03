@@ -29,6 +29,7 @@ class SamplingTab(QWidget):
         super().__init__(parent)
         self._field_mappings: List[List[str]] = []
         self._grouping_fields: List[str] = []
+        self.gdf_fields: List[str] = []
         self._init_ui()
         self._connect_signals()
 
@@ -427,7 +428,7 @@ class SamplingTab(QWidget):
         self.min_custom_spin.valueChanged.connect(self._emit_config_changed)
         self.min_percent_spin.valueChanged.connect(self._emit_config_changed)
         self.use_original_area_check.toggled.connect(self._emit_config_changed)
-        self.show_preview_check.toggled.connect(self._emit_config_changed)
+        self.show_preview_check.toggled.connect(self._generate_distribution_preview)
         self.generate_preview_btn.clicked.connect(self._generate_distribution_preview)
         self.add_grouping_btn.clicked.connect(self._add_grouping_field)
         self.remove_grouping_btn.clicked.connect(self._remove_grouping_field)
@@ -481,7 +482,7 @@ class SamplingTab(QWidget):
         # ComboBox para Field
         field_combo = QComboBox()
         field_combo.setEditable(True)
-        field_combo.addItems(self._get_available_fields())
+        field_combo.addItems(self.gdf_fields)
         field_combo.setCurrentText("tipouso")
         field_combo.currentTextChanged.connect(lambda text, r=row: self._on_field_changed(r, text))
         self.intensity_table.setCellWidget(row, 0, field_combo)
@@ -506,24 +507,11 @@ class SamplingTab(QWidget):
         self._emit_config_changed()
 
     def _get_available_fields(self) -> List[str]:
-        """Obtiene los campos disponibles desde el archivo del Plan Operativo."""
-        try:
-            # Obtener la ruta y capa del archivo PO desde la aplicación principal
-            po_file_path, po_layer = self._get_po_file_info()
-            if po_file_path and po_layer:
-                # Leer el archivo usando geopandas con pyogrio
-                gdf = gpd.read_file(po_file_path, layer=po_layer, engine='pyogrio', rows=1)  # Solo 1 fila para obtener columnas
-                # Filtrar campos útiles para intensidades (excluir geometry y campos técnicos)
-                exclude_fields = ['geometry', 'fid', 'objectid', 'shape_length', 'shape_area', 'sup_ha']
-                available_fields = [col for col in gdf.columns 
-                                  if col.lower() not in [f.lower() for f in exclude_fields]]
-                if available_fields:
-                    return available_fields
-        except Exception as e:
-                            pass  # Error silenciado - no crítico para la funcionalidad
-        
-        # Campos por defecto si no se pueden obtener dinámicamente
-        return ["tipouso", "tipomateri", "predio", "rodal", "gridcode"]
+        """
+        Returns the list of available GDF fields.
+        This list is now updated externally via update_gdf_fields.
+        """
+        return self.gdf_fields
 
     def _get_field_values(self, field_name: str) -> List[str]:
         """Obtiene los valores únicos para un campo específico desde el archivo del Plan Operativo."""
@@ -1358,4 +1346,44 @@ No groups have parcels assigned."""
         finally:
             # Rehabilitar botón
             self.generate_preview_btn.setEnabled(True)
-            self.generate_preview_btn.setText("Generate Preview") 
+            self.generate_preview_btn.setText("Generate Preview")
+
+    def update_gdf_fields(self, gdf_fields: List[str]) -> None:
+        """
+        Updates the list of available GDF fields from the main input layer.
+        """
+        self.gdf_fields = gdf_fields
+        self._update_field_mapping_combos()
+        self._update_grouping_fields_combos()
+        self._update_intensity_fields_combos()
+
+    def _update_combo_box_items(self, combo: QComboBox, items: List[str]) -> None:
+        """Helper to update QComboBox items, preserving selection."""
+        current_selection = combo.currentText()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItems(items)
+        if current_selection in items:
+            combo.setCurrentText(current_selection)
+        combo.blockSignals(False)
+
+    def _update_field_mapping_combos(self) -> None:
+        """Update the GDF Field dropdown in the mapping table."""
+        for row in range(self.mapping_table.rowCount()):
+            combo = self.mapping_table.cellWidget(row, 0)
+            if isinstance(combo, QComboBox):
+                self._update_combo_box_items(combo, self.gdf_fields)
+
+    def _update_grouping_fields_combos(self) -> None:
+        """Update the Grouping Field dropdown in the grouping table."""
+        for row in range(self.grouping_table.rowCount()):
+            combo = self.grouping_table.cellWidget(row, 0)
+            if isinstance(combo, QComboBox):
+                self._update_combo_box_items(combo, self.gdf_fields)
+
+    def _update_intensity_fields_combos(self) -> None:
+        """Update the Field dropdown in the intensity table."""
+        for row in range(self.intensity_table.rowCount()):
+            combo = self.intensity_table.cellWidget(row, 0)
+            if isinstance(combo, QComboBox):
+                self._update_combo_box_items(combo, self.gdf_fields) 

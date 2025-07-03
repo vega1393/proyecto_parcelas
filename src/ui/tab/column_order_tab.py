@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QMimeData
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont
-from src.utils.dialog_utils import EnhancedFileDialog
+from src.utils.dialog_utils import EnhancedFileDialog, get_initial_directory_from_path
 
 try:
     import geopandas as gpd
@@ -61,6 +61,7 @@ class ColumnOrderTab(QWidget):
     Tab para reordenar columnas en archivos de salida.
     """
     configChanged = pyqtSignal(dict)
+    request_pipeline_output = pyqtSignal()
 
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -421,29 +422,31 @@ class ColumnOrderTab(QWidget):
         self.load_schema_btn.setEnabled(has_file)  # Necesita archivo para validar compatibilidad
 
     def _browse_file(self) -> None:
-        """Abre diálogo para seleccionar archivo."""
+        initial_dir = get_initial_directory_from_path(self.file_path_line.text())
         file_path, _ = EnhancedFileDialog.get_open_file_name(
-            self, "Select Geospatial File",
-            "", "Geospatial Files (*.gpkg *.shp *.gdb);;GPKG Files (*.gpkg);;Shapefile (*.shp);;Geodatabase (*.gdb);;All Files (*)"
+            self, "Select GPKG/SHP File", initial_dir, "GeoPackage (*.gpkg);;Shapefile (*.shp)"
         )
         if file_path:
-            self.file_path_line.setText(file_path)
             self._load_file_info(file_path)
 
     def _browse_output(self) -> None:
-        """Abre diálogo para seleccionar archivo de salida."""
-        file_path, _ = EnhancedFileDialog.get_save_file_name(
-            self, "Save Reordered File As",
-            "", "Geospatial Files (*.gpkg *.shp);;GPKG Files (*.gpkg);;Shapefile (*.shp);;All Files (*)"
+        """Abre un diálogo para seleccionar el archivo de salida, usando la ruta de entrada como base."""
+        if not self._current_file_path:
+            QMessageBox.warning(self, "Input File Required", "Please load an input file first.")
+            return
+
+        initial_dir = os.path.dirname(self._current_file_path)
+        default_name = os.path.basename(self._current_file_path).replace(".gpkg", "_reordered.gpkg")
+        
+        output_path, _ = EnhancedFileDialog.get_save_file_name(
+            self, "Select Output File", os.path.join(initial_dir, default_name), "GeoPackage (*.gpkg)"
         )
-        if file_path:
-            self.output_path_line.setText(file_path)
+        if output_path:
+            self.output_path_line.setText(output_path)
 
     def _use_pipeline_output(self) -> None:
-        """Usa el archivo de salida final del pipeline."""
-        # Esta función será llamada desde la aplicación principal
-        # para obtener la ruta de salida del pipeline
-        self.configChanged.emit({"action": "request_pipeline_output"})
+        """Emite una señal para solicitar la ruta de salida del pipeline principal."""
+        self.request_pipeline_output.emit()
 
     def _load_file_info(self, file_path: str) -> None:
         """Carga información del archivo seleccionado."""
